@@ -15,6 +15,15 @@ on:
       - scripts/build_android_from_nsp.py
       - .github/workflows/windows-package.yml
   workflow_dispatch:
+    inputs:
+      version:
+        description: The version the staged tree's VERSION file says (default git describe)
+        type: string
+        default: ''
+      ref:
+        description: What to check out (a tag or branch; default the dispatching ref)
+        type: string
+        default: ''
   workflow_call:
     inputs:
       version:
