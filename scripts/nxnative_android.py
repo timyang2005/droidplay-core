@@ -20,7 +20,7 @@ import json, os, re, shutil, subprocess, sys, time, uuid
 from pathlib import Path
 
 try:
-    from PySide6.QtCore import QByteArray, QObject, QProcess, QProcessEnvironment, QRectF, QRunnable, QSettings, QSize, Qt, QThreadPool, QTimer, QUrl, Signal  # pyright: ignore[reportMissingImports]   (PySide6 is the desktop app's alone; the lint job does not install it)
+    from PySide6.QtCore import QByteArray, QLocale, QObject, QProcess, QProcessEnvironment, QRectF, QRunnable, QSettings, QSize, Qt, QThreadPool, QTimer, QUrl, Signal  # pyright: ignore[reportMissingImports]   (PySide6 is the desktop app's alone; the lint job does not install it)
     from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap  # pyright: ignore[reportMissingImports]
     from PySide6.QtSvg import QSvgRenderer  # pyright: ignore[reportMissingImports]
     from PySide6.QtWidgets import (  # pyright: ignore[reportMissingImports]
@@ -45,10 +45,11 @@ import wifi   # noqa: E402  # pyright: ignore[reportMissingImports]  (what adb p
 import explain as ex   # noqa: E402  # pyright: ignore[reportMissingImports]  (plain words for what went wrong, and the report for #help)
 import phone_guide as pg   # noqa: E402  # pyright: ignore[reportMissingImports]  (how to connect a phone, by brand; its battery and free space)
 import update as upd   # noqa: E402  # pyright: ignore[reportMissingImports]  (the newest release, and its Setup downloaded and checked)
+import i18n as L   # noqa: E402  # pyright: ignore[reportMissingImports]  (dm/android/desktop: the words this window and the modules below show, Chinese on a Chinese system and English elsewhere)
 
-LANGUAGES = [('en-US', 'American English'), ('en-GB', 'British English'), ('ja', 'Japanese'), ('fr', 'French'), ('de', 'German'), ('es-419', 'Latin American Spanish'),
-             ('es', 'Spanish'), ('it', 'Italian'), ('nl', 'Dutch'), ('fr-CA', 'Canadian French'), ('pt', 'Portuguese'), ('ru', 'Russian'), ('ko', 'Korean'),
-             ('zh-Hant', 'Traditional Chinese'), ('zh-Hans', 'Simplified Chinese'), ('pt-BR', 'Brazilian Portuguese')]
+LANGUAGES = [('en-US', L.t('American English', '美式英语')), ('en-GB', L.t('British English', '英式英语')), ('ja', L.t('Japanese', '日语')), ('fr', L.t('French', '法语')), ('de', L.t('German', '德语')), ('es-419', L.t('Latin American Spanish', '拉美西班牙语')),
+             ('es', L.t('Spanish', '西班牙语')), ('it', L.t('Italian', '意大利语')), ('nl', L.t('Dutch', '荷兰语')), ('fr-CA', L.t('Canadian French', '加拿大法语')), ('pt', L.t('Portuguese', '葡萄牙语')), ('ru', L.t('Russian', '俄语')), ('ko', L.t('Korean', '韩语')),
+             ('zh-Hant', L.t('Traditional Chinese', '繁体中文')), ('zh-Hans', L.t('Simplified Chinese', '简体中文')), ('pt-BR', L.t('Brazilian Portuguese', '巴西葡萄牙语'))]
 NOWINDOW = 0x08000000 if os.name == 'nt' else 0   # CREATE_NO_WINDOW: no console flashing up for each adb call
 # The Python that builds and the script's --check and --info run on. On Windows the Start menu shortcut opens this app on pythonw.exe, which has no console, so
 # each console tool a build runs on it (java, dotnet, cmake, ninja, adb…) would open a window of its own, dozens in a build. The python.exe beside it, started from
@@ -209,16 +210,16 @@ def alive(pid):
 
 
 def journal_title(argv):   # what a build from the console does, from its command line
-    if '--apk-only' in argv: return 'Update the app'
-    if '--migrate' in argv: return 'Move the old install'
+    if '--apk-only' in argv: return L.t('Update the app', '更新应用')
+    if '--migrate' in argv: return L.t('Move the old install', '迁移旧的安装')
     if '--setup' in argv: return fr.SETUP_TITLE
     folder = next((x for x in argv if not x.startswith('-') and Path(x).is_dir()), None)
     name = None
     if folder:
         try: name = next((m.get('name') for _, (_, m) in ba.library().items() if m.get('nsp_dir') == str(Path(folder).resolve())), None)
         except Exception: pass
-    what = ('Build the game app of ' if '--game-apk' in argv or '--xapk' in argv else 'Update the shaders of ' if '--update-shaders' in argv
-            else 'Install ' if '--push-only' in argv else 'Build ')
+    what = (L.t('Build the game app of ', '构建游戏应用：') if '--game-apk' in argv or '--xapk' in argv else L.t('Update the shaders of ', '更新着色器：') if '--update-shaders' in argv
+            else L.t('Install ', '安装 ') if '--push-only' in argv else L.t('Build ', '构建 '))
     return what + (name or (Path(folder).name if folder else 'a game'))
 
 
@@ -271,18 +272,18 @@ class Game:
     def new_shaders(self, on_phone):   # run-time shaders the phone saved beyond the ones on this computer (a provisional profile's only: build_android_from_nsp.py pull_captures)
         return max(0, (on_phone.get(self.id) or {}).get('captures', 0) - self.captures) if self.provisional else 0
     def status(self, on_phone, phone):   # (text, colour, state): state picks what Play does
-        if self.info.get('needs_keys'): return 'Needs your prod.keys to read it: Get started, step 1', ERR, 'keys'
+        if self.info.get('needs_keys'): return L.t('Needs your prod.keys to read it: Get started, step 1', '需要你的 prod.keys 才能读取：开始使用，第 1 步'), ERR, 'keys'
         # not the game's fault: the tools that read it aren't installed yet. It showed as unreadable, with a disabled "Not supported", to every new player
-        if self.info.get('needs_tools'): return "Install DroidPlay's tools to read it: Get started, step 2", BUILD, 'tools'
+        if self.info.get('needs_tools'): return L.t("Install DroidPlay's tools to read it: Get started, step 2", "需要先安装 DroidPlay 的工具才能读取：开始使用，第 2 步"), BUILD, 'tools'
         if self.error:   # in plain words (explain.py): keys older than the game get Pick your prod.keys, not a disabled "Can't read it"
             h = ex.explain(self.error); return h.title, ERR, {'keys': 'keys', 'tools': 'tools'}.get(h.action, 'none')
-        if not self.profile: return 'Not supported yet: experimental build only', ERR, 'survey'
-        x = 'Experimental (provisional profile, may not boot) · ' if self.provisional else ''   # an experimental build's profile, guessed from the survey
+        if not self.profile: return L.t('Not supported yet: experimental build only', '尚不支持：只能做实验性构建'), ERR, 'survey'
+        x = L.t('Experimental (provisional profile, may not boot) · ', '实验性（临时配置，可能无法启动）· ') if self.provisional else ''   # an experimental build's profile, guessed from the survey
         n = self.new_shaders(on_phone)
-        if n and self.host: return f'{x}{n} new shader(s) captured on the phone · Manage → Update shaders', BUILD, 'install' if self.id not in on_phone else 'play'
-        if self.id in on_phone and self.host: return f'{x}Ready on {phone or "the phone"}', ERR if x else READY, 'play'
-        if self.host: return f'{x}Built · not on this phone', ERR if x else BUILD, 'install'
-        return f'{x}Not built yet', ERR if x else TEXT3, 'build'
+        if n and self.host: return L.t(f'{x}{n} new shader(s) captured on the phone · Manage → Update shaders', f'{x}手机上捕获了 {n} 个新着色器 · 管理 → 更新着色器'), BUILD, 'install' if self.id not in on_phone else 'play'
+        if self.id in on_phone and self.host: return f'{x}Ready on {phone or L.t("the phone", "手机")}', ERR if x else READY, 'play'
+        if self.host: return L.t(f'{x}Built · not on this phone', f'{x}已构建 · 不在这台手机上'), ERR if x else BUILD, 'install'
+        return L.t(f'{x}Not built yet', f'{x}还没构建'), ERR if x else TEXT3, 'build'
 
 
 class Hero(QWidget):   # the picked game, large: its art's wash behind, the art itself on the right, the status, the title and the actions
@@ -295,21 +296,21 @@ class Hero(QWidget):   # the picked game, large: its art's wash behind, the art 
         self.title.setMaximumWidth(900); lay.addWidget(self.title); lay.addSpacing(10)
         self.meta = label('', 'meta', wrap=True); self.meta.setMaximumWidth(900); lay.addWidget(self.meta); lay.addStretch(); lay.addSpacing(20)
         row = QHBoxLayout(); row.setSpacing(16)
-        self.play = QPushButton('  Play'); self.play.setObjectName('play'); self.play.setIcon(icon('play', '#121212', 22)); self.play.setIconSize(QSize(22, 22)); self.play.setCursor(Qt.PointingHandCursor)
-        self.opts = QPushButton(); self.opts.setObjectName('round'); self.opts.setIcon(icon('settings', TEXT, 22)); self.opts.setIconSize(QSize(22, 22)); self.opts.setToolTip('Version and language'); self.opts.setCursor(Qt.PointingHandCursor)
-        self.manage = QToolButton(); self.manage.setObjectName('manage'); self.manage.setText(' Manage  '); self.manage.setIcon(icon('more', TEXT, 18)); self.manage.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.play = QPushButton(L.t('  Play', '  开始游戏')); self.play.setObjectName('play'); self.play.setIcon(icon('play', '#121212', 22)); self.play.setIconSize(QSize(22, 22)); self.play.setCursor(Qt.PointingHandCursor)
+        self.opts = QPushButton(); self.opts.setObjectName('round'); self.opts.setIcon(icon('settings', TEXT, 22)); self.opts.setIconSize(QSize(22, 22)); self.opts.setToolTip(L.t('Version and language', '版本与语言')); self.opts.setCursor(Qt.PointingHandCursor)
+        self.manage = QToolButton(); self.manage.setObjectName('manage'); self.manage.setText(L.t(' Manage  ', ' 管理 ')); self.manage.setIcon(icon('more', TEXT, 18)); self.manage.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.manage.setPopupMode(QToolButton.InstantPopup); self.manage.setCursor(Qt.PointingHandCursor)
         row.addWidget(self.play); row.addWidget(self.opts); row.addWidget(self.manage); row.addStretch(); lay.addLayout(row)
 
     def show_game(self, g, status, color):
         self.pm = g.pm if g else QPixmap(); self.cache = None
         self.status.setText(f'<span style="color:{color}">●&nbsp;&nbsp;{esc(status.upper())}</span>' if g else '')
-        self.title.setText(esc(g.name) if g else 'Add your first game')
+        self.title.setText(esc(g.name) if g else L.t('Add your first game', '添加你的第一个游戏'))
         if g and g.error and not g.info.get('needs_keys') and not g.info.get('needs_tools'): self.meta.setText(ex.explain(g.error).body)   # what to do about it
         elif g:
-            bits = [g.id, f'v{g.display}' if g.display else None, (g.info.get('table') or {}).get('engine'), 'played on Android' if g.tested else 'not played on Android yet']
+            bits = [g.id, f'v{g.display}' if g.display else None, (g.info.get('table') or {}).get('engine'), L.t('played on Android', '已在安卓上玩过') if g.tested else L.t('not played on Android yet', '还没在安卓上玩过')]
             self.meta.setText('   ·   '.join(b for b in bits if b))
-        else: self.meta.setText('Pick the folder with your game\'s NSP or XCI files and your prod.keys, or with a Switch 2 game\'s .nup or dump (no keys): + Build game, at the top right')
+        else: self.meta.setText(L.t('Pick the folder with your game\'s NSP or XCI files and your prod.keys, or with a Switch 2 game\'s .nup or dump (no keys): + Build game, at the top right', '选择存放游戏 NSP 或 XCI 文件与 prod.keys 的文件夹，或存放 Switch 2 游戏 .nup 或 dump 的文件夹（不需要密钥）：右上角的「+ 构建游戏」'))
         self.update()
 
     def resizeEvent(self, e):
@@ -388,7 +389,7 @@ class LibraryPage(QWidget):
         self.hero.play.clicked.connect(self.play); self.hero.opts.clicked.connect(self.options)
         self.menu = QMenu(self); self.hero.manage.setMenu(self.menu); self.menu.aboutToShow.connect(self.fill_menu)
         body = QWidget(); bl = QVBoxLayout(body); bl.setContentsMargins(48, 8, 48, 24); bl.setSpacing(18)
-        head = QHBoxLayout(); head.addWidget(label('Your collection', 'h2')); head.addStretch(); self.count = label('', 'muted'); head.addWidget(self.count); bl.addLayout(head)
+        head = QHBoxLayout(); head.addWidget(label(L.t('Your collection', '你的收藏'), 'h2')); head.addStretch(); self.count = label('', 'muted'); head.addWidget(self.count); bl.addLayout(head)
         strip = QWidget(); sl = QGridLayout(strip); sl.setContentsMargins(0, 0, 0, 0)
         self.scroll = QScrollArea(); self.scroll.setWidgetResizable(True); self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll.setFixedHeight(Card.H + 84)
@@ -398,7 +399,7 @@ class LibraryPage(QWidget):
         self.prev = QPushButton(); self.prev.setObjectName('arrow'); self.prev.setIcon(icon('left', TEXT, 20)); self.prev.clicked.connect(lambda: self.slide(-1))
         sl.addWidget(self.next, 0, 0, Qt.AlignRight | Qt.AlignTop); sl.addWidget(self.prev, 0, 0, Qt.AlignLeft | Qt.AlignTop)
         self.next.setStyleSheet(f'margin-top: {Card.H // 2 - 22}px'); self.prev.setStyleSheet(f'margin-top: {Card.H // 2 - 22}px')
-        bl.addWidget(strip); self.empty = label('No games yet. + Build game adds the folder with a game\'s NSP or XCI files, or with a Switch 2 game\'s .nup or dump.', 'muted'); bl.addWidget(self.empty)
+        bl.addWidget(strip); self.empty = label(L.t('No games yet. + Build game adds the folder with a game\'s NSP or XCI files, or with a Switch 2 game\'s .nup or dump.', '还没有游戏。「+ 构建游戏」会添加存放游戏 NSP 或 XCI 文件的文件夹，或存放 Switch 2 游戏 .nup 或 dump 的文件夹。'), 'muted'); bl.addWidget(self.empty)
         outer.addWidget(body, 0)
         self.scroll.horizontalScrollBar().valueChanged.connect(self.arrows); self.scroll.horizontalScrollBar().rangeChanged.connect(lambda *_: self.arrows())
         self.reload()
@@ -420,7 +421,7 @@ class LibraryPage(QWidget):
                 if not Path(f).is_dir(): continue
                 try: out[f] = self.win.script_json('--info', f, *(['-k', keys] if keys else []))
                 except Exception as e:
-                    msg = str(e).strip().splitlines()[-1].removeprefix('[RED] ') if str(e).strip() else 'could not be read'
+                    msg = str(e).strip().splitlines()[-1].removeprefix('[RED] ') if str(e).strip() else L.t('could not be read', '读不出来')
                     # no keys yet, or no tools yet: before Install what's missing has brought the .NET SDK, nothing can read the packages (build_ipa_from_nsp.py's
                     # "needs dotnet"), and every game read as a folder that could not be read
                     out[f] = {'error': msg, 'needs_keys': not keys and 'prod.keys' in msg, 'needs_tools': 'dotnet' in msg,
@@ -428,7 +429,7 @@ class LibraryPage(QWidget):
             return out
         def got(r):
             self.reading = False
-            if isinstance(r, Exception): self.win.toast(f'Reading the games failed: {r}'); r = {}
+            if isinstance(r, Exception): self.win.toast(L.t(f'Reading the games failed: {r}', f'读取游戏失败：{r}')); r = {}
             self.games, ids = {}, set()
             for f, i in r.items():   # one card per game, from the first folder that holds it
                 g = Game(f, i)
@@ -467,8 +468,8 @@ class LibraryPage(QWidget):
         if not g: self.hero.show_game(None, '', TEXT3); self.hero.play.setEnabled(False); self.hero.opts.setEnabled(False); return
         text, color, state = g.status(self.win.phone_games, self.win.phone_name())
         self.hero.show_game(g, text, color); self.hero.opts.setEnabled(bool(g.profile))
-        self.hero.play.setText({'play': '  Play', 'install': '  Install on phone', 'build': '  Build and install', 'survey': '  Experimental build', 'keys': '  Pick your prod.keys',
-                                'tools': '  Install the tools', 'none': "  Can't read it"}[state])
+        self.hero.play.setText({'play': L.t('  Play', '  开始游戏'), 'install': L.t('  Install on phone', '  安装到手机'), 'build': L.t('  Build and install', '  构建并安装'), 'survey': L.t('  Experimental build', '  实验性构建'), 'keys': L.t('  Pick your prod.keys', '  选择 prod.keys'),
+                                'tools': L.t('  Install the tools', '  安装工具'), 'none': L.t("  Can't read it", "  读不出来")}[state])
         self.hero.play.setEnabled(state != 'none')
     def current(self): return self.games.get(self.picked)
     def slide(self, d): sb = self.scroll.horizontalScrollBar(); sb.setValue(sb.value() + d * (Card.W + 20) * 2)
@@ -492,18 +493,16 @@ class LibraryPage(QWidget):
         if state == 'play':
             if not self.first_start_ok(g, s): return
             bg(lambda: adb_run(s, 'shell', 'am', 'start', '-n', f'{PKG}/.Launcher', '--es', 'game', g.id, '--ez', 'play', 'true'),
-               lambda r: self.win.toast(f'Starting {g.name} on {self.win.phone_name()}' if not isinstance(r, Exception) and r[0] else f'Could not start it: {r}'))
-        elif state == 'install': self.run(g, ['--push-only'], 'Install')
-        elif state == 'build': self.run(g, [], 'Build') if s else self.run(g, ['--no-push'], 'Build')
+               lambda r: self.win.toast(L.t(f'Starting {g.name} on {self.win.phone_name()}', f'正在 {self.win.phone_name()} 上启动 {g.name}') if not isinstance(r, Exception) and r[0] else L.t(f'Could not start it: {r}', f'启动失败：{r}')))
+        elif state == 'install': self.run(g, ['--push-only'], L.t('Install', '安装'))
+        elif state == 'build': self.run(g, [], L.t('Build', '构建')) if s else self.run(g, ['--no-push'], L.t('Build', '构建'))
         elif state == 'survey':   # no profile: the script surveys the game, guesses a provisional profile and packs a best-effort APK (not installed: it may not boot)
-            box = QMessageBox(QMessageBox.Warning, 'Experimental build', f'{g.name} has no profile in DroidPlay Core, so it is not supported yet. '
-                              'The build extracts the game, writes a survey of it (survey.md in its folder), guesses a provisional profile and packs an APK that '
-                              'will most likely not boot. Nothing is installed on the phone. It is the starting point for porting the game.', parent=self)
-            go = box.addButton('Build anyway', QMessageBox.AcceptRole); box.setDefaultButton(box.addButton(QMessageBox.Cancel)); box.exec()
-            if box.clickedButton() is go: self.run(g, ['--no-push'], 'Experimental build')
+            box = QMessageBox(QMessageBox.Warning, L.t('Experimental build', '实验性构建'), L.t(f'{g.name} has no profile in DroidPlay Core, so it is not supported yet. The build extracts the game, writes a survey of it (survey.md in its folder), guesses a provisional profile and packs an APK that will most likely not boot. Nothing is installed on the phone. It is the starting point for porting the game.', f'{g.name} 在 DroidPlay Core 里还没有配置，所以暂时不支持。构建会解包游戏、写一份它的调查（放在它文件夹里的 survey.md）、猜一份临时配置，再打一个很可能起不来的 APK。不会往手机上装任何东西。它是移植这个游戏的起点。'), parent=self)
+            go = box.addButton(L.t('Build anyway', '仍然构建'), QMessageBox.AcceptRole); box.setDefaultButton(box.addButton(QMessageBox.Cancel)); box.exec()
+            if box.clickedButton() is go: self.run(g, ['--no-push'], L.t('Experimental build', '实验性构建'))
     def run(self, g, extra, what, after=None):
         keys = self.win.st.value('keys', '')
-        if not keys or not Path(keys).is_file(): self.win.toast('Pick your prod.keys first'); self.win.go('setup'); return
+        if not keys or not Path(keys).is_file(): self.win.toast(L.t('Pick your prod.keys first', '请先选择 prod.keys')); self.win.go('setup'); return
         args = [g.folder, '-k', keys, '-l', self.win.st.value(f'lang/{g.id}', 'en-US') or 'en-US']
         v = self.win.st.value(f'ver/{g.id}', '')
         if v: args += ['-p', v]
@@ -523,41 +522,37 @@ class LibraryPage(QWidget):
     def first_start_ok(self, g, s):   # the first Play since the game went onto this phone: say the screen stays black a while, so it isn't taken for a crash
         keys = {f'firststart/{self.win.phone_key(s)}/{g.id}', f'firststart/{s}/{g.id}'}   # kept by the phone's ID; by its serial before IDs
         if not any(self.win.st.value(k, False, type=bool) for k in keys) or self.win.st.value('firststart/never', False, type=bool): return True
-        box = QMessageBox(QMessageBox.Information, 'The first start', '<b>The first start takes a minute or two.</b>', parent=self)
-        box.setInformativeText(f'{self.win.phone_name()} prepares {g.name}\'s shaders first, and stays on the loading screen meanwhile (80 seconds for Brilliant '
-                               'Diamond on a Galaxy S25 Edge, 39 on a OnePlus Pad 3). The phone may get warm. Later starts take a few seconds.')
+        box = QMessageBox(QMessageBox.Information, L.t('The first start', '第一次启动'), L.t('<b>The first start takes a minute or two.</b>', '<b>第一次启动要一两分钟。</b>'), parent=self)
+        box.setInformativeText(L.t(f"{self.win.phone_name()} prepares {g.name}\'s shaders first, and stays on the loading screen meanwhile (80 seconds for Brilliant Diamond on a Galaxy S25 Edge, 39 on a OnePlus Pad 3). The phone may get warm. Later starts take a few seconds.", f"{self.win.phone_name()} 会先准备 {g.name} 的着色器，这段时间停在加载画面（璀璨钻石在 Galaxy S25 Edge 上约 80 秒，OnePlus Pad 3 上约 39 秒）。手机可能会发热。之后启动只要几秒。"))
         box.setStyleSheet('QLabel#qt_msgbox_informativelabel { min-width: 460px; }')   # Qt sizes a message box to its title line: the text wrapped in a narrow column
-        never = QCheckBox("Don't show this again"); box.setCheckBox(never)
-        go = box.addButton('Play', QMessageBox.AcceptRole); box.addButton(QMessageBox.Cancel); box.setDefaultButton(go); box.exec()
+        never = QCheckBox(L.t("Don't show this again", "不再显示")); box.setCheckBox(never)
+        go = box.addButton(L.t('Play', '开始游戏'), QMessageBox.AcceptRole); box.addButton(QMessageBox.Cancel); box.setDefaultButton(go); box.exec()
         if never.isChecked(): self.win.st.setValue('firststart/never', True)
         if box.clickedButton() is not go: return False
         for k in keys: self.win.st.remove(k)
         return True
     def game_app(self, g):   # the game as an app of its own (build_android_from_nsp.py --game-apk): no phone, and the launcher app on the phones is left as it is
         ex = (g.info.get('extracted') or {}).get(self.win.st.value(f'ver/{g.id}', '') or g.newest) or {}
-        rom = ex.get('romfs_bytes'); data = f'its {gb_text(rom)} of game data' if rom else 'its game data'
-        d = QDialog(self); d.setWindowTitle(f'Game app: {g.name}'); d.setStyleSheet(STYLE + f'QDialog {{ background: {PANEL}; }}'); d.setMinimumWidth(560)
+        rom = ex.get('romfs_bytes'); data = f'its {gb_text(rom)} of game data' if rom else L.t('its game data', '它的游戏数据')
+        d = QDialog(self); d.setWindowTitle(L.t(f'Game app: {g.name}', f'游戏应用：{g.name}')); d.setStyleSheet(STYLE + f'QDialog {{ background: {PANEL}; }}'); d.setMinimumWidth(560)
         outer = QVBoxLayout(d); outer.setContentsMargins(0, 0, 0, 0); outer.setSpacing(0)
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); outer.addWidget(scroll, 1)
         body = QWidget(); body.setStyleSheet('background: transparent'); scroll.setWidget(body)
         lay = QVBoxLayout(body); lay.setContentsMargins(24, 24, 24, 8); lay.setSpacing(10)
-        lay.addWidget(label(f'{g.name} as an app of its own, with its own icon and saves, opening straight into the game on any arm64 device with Vulkan. '
-                            'Several games install side by side, without the launcher app.', 'meta', wrap=True))
+        lay.addWidget(label(L.t(f'{g.name} as an app of its own, with its own icon and saves, opening straight into the game on any arm64 device with Vulkan. Several games install side by side, without the launcher app.', f'把 {g.name} 做成一个独立的应用，有自己的图标和存档，在任何支持 Vulkan 的 arm64 设备上直接进入游戏。多个游戏可以并排安装，不用启动器应用。'), 'meta', wrap=True))
         lay.addSpacing(6)
         apk = QRadioButton('APK'); lay.addWidget(apk)
-        beside = ('as a .romfs file beside the APK, which takes no extra space on the same drive: copy both to the device, put the .romfs anywhere (an SD card '
-                  'too) and pick it when the app first opens')
-        lay.addWidget(label(f'{gb_text(rom)} of game data is more than an APK holds (2 GB), so the data goes {beside}.' if rom and rom >= ba.GAME_APP_LIMIT else
-                            f'One file with {data} inside, while it fits under 2 GB with the game\'s code; otherwise the data goes {beside}.', 'muted', wrap=True))
+        beside = (L.t('as a .romfs file beside the APK, which takes no extra space on the same drive: copy both to the device, put the .romfs anywhere (an SD card too) and pick it when the app first opens', '作为 APK 旁边的 .romfs 文件，在同一块盘上不额外占空间：把两个都拷到设备上，.romfs 放在哪都行（SD 卡也行），应用第一次打开时选它'))
+        lay.addWidget(label(L.t(f'{gb_text(rom)} of game data is more than an APK holds (2 GB), so the data goes {beside}.', f'{gb_text(rom)} 的游戏数据超过了 APK 装得下的量（2 GB），所以数据{beside}。') if rom and rom >= ba.GAME_APP_LIMIT else
+                            L.t(f'One file with {data} inside, while it fits under 2 GB with the game\'s code; otherwise the data goes {beside}.', f'一个文件，把 {data} 装在里面，只要和游戏代码一起不超过 2 GB；否则数据{beside}。'), 'muted', wrap=True))
         xapk = QRadioButton('XAPK'); lay.addWidget(xapk)
-        lay.addWidget(label(f'One file, with {data} as the app\'s OBB file, for an XAPK installer app on the device. It holds a full copy of the data, so it takes '
-                            'that much more space on this computer.', 'muted', wrap=True))
+        lay.addWidget(label(L.t(f"One file, with {data} as the app\'s OBB file, for an XAPK installer app on the device. It holds a full copy of the data, so it takes that much more space on this computer.", f"一个文件，把 {data} 作为应用的 OBB 文件，给设备上的 XAPK 安装器用。它包含一份完整的数据副本，所以要在这台电脑上多占那么多空间。"), 'muted', wrap=True))
         (xapk if self.win.st.value('game_app_kind', 'apk') == 'xapk' else apk).setChecked(True)
-        sd = QCheckBox('Keep the game data for an SD card'); sd.setChecked(gd.valid(self.win.st.value(f'data/{g.id}', gd.PHONE)) == gd.SD); lay.addWidget(sd)   # the same per-game choice as Options' Game data
-        lay.addWidget(label(gd.MEANING_APP + ' With XAPK, the data is in the file.', 'muted', wrap=True))
+        sd = QCheckBox(L.t('Keep the game data for an SD card', '把游戏数据留给 SD 卡')); sd.setChecked(gd.valid(self.win.st.value(f'data/{g.id}', gd.PHONE)) == gd.SD); lay.addWidget(sd)   # the same per-game choice as Options' Game data
+        lay.addWidget(label(gd.MEANING_APP + L.t(' With XAPK, the data is in the file.', ' 用 XAPK 时，数据就在这个文件里。'), 'muted', wrap=True))
         xapk.toggled.connect(lambda on: sd.setEnabled(not on)); sd.setEnabled(not xapk.isChecked())
-        lay.addSpacing(6); lay.addWidget(label(f'It goes in the game\'s folder, {g.folder}, beside the other kind if that was built too.', 'muted', wrap=True))
-        bb = QDialogButtonBox(QDialogButtonBox.Cancel); bb.addButton('Build', QDialogButtonBox.AcceptRole); bb.accepted.connect(d.accept); bb.rejected.connect(d.reject)
+        lay.addSpacing(6); lay.addWidget(label(L.t(f'It goes in the game\'s folder, {g.folder}, beside the other kind if that was built too.', f'它放在游戏的文件夹 {g.folder} 里，如果另一种也构建过，就和它并排。'), 'muted', wrap=True))
+        bb = QDialogButtonBox(QDialogButtonBox.Cancel); bb.addButton(L.t('Build', '构建'), QDialogButtonBox.AcceptRole); bb.accepted.connect(d.accept); bb.rejected.connect(d.reject)
         foot = QWidget(); fl = QVBoxLayout(foot); fl.setContentsMargins(24, 8, 24, 24); fl.addWidget(bb); outer.addWidget(foot)
         # as tall as its text at its width, within the screen, and the text scrolls beyond that: left to Qt, a new window keeps within 2/3 of the screen's
         # height, and the wrapped lines were squeezed and cut mid-line on a laptop at 150% (a 1080p screen is 720 high then)
@@ -567,17 +562,15 @@ class LibraryPage(QWidget):
         x = xapk.isChecked(); self.win.st.setValue('game_app_kind', 'xapk' if x else 'apk')
         if not x: self.win.st.setValue(f'data/{g.id}', gd.SD if sd.isChecked() else gd.PHONE)
         made = f'{ba.safe_name(g.name) or g.id}.{"xapk" if x else "apk"}'
-        def done(): self.after_task(); reveal(g.folder); self.win.toast(f'{made} is in the game\'s folder')
-        self.run(g, ['--game-apk'] + (['--xapk'] if x else []), 'Build the game app of', after=done)
+        def done(): self.after_task(); reveal(g.folder); self.win.toast(L.t(f'{made} is in the game\'s folder', f'{made} 已经在游戏文件夹里'))
+        self.run(g, ['--game-apk'] + (['--xapk'] if x else []), L.t('Build the game app of', '构建游戏应用'), after=done)
     def after_task(self): self.win.refresh_phone(); self.reload()
     def sd_cards(self, s):   # the phone's SD cards (volume IDs), by the script's own reading of the same two adb calls
         v = adb_run(s, 'shell', 'sm list-volumes public 2>/dev/null', timeout=8)[1]
         return ba.sd_card_ids(v, '' if ba.sd_card_ids(v, '') else adb_run(s, 'shell', 'ls /storage 2>/dev/null', timeout=8)[1])
     def legacy_ok(self, s):   # the phone holds the one-game install (files/game) and its save: installing moves it to the launcher, and the app copies the save on its next start
-        b = QMessageBox(QMessageBox.Warning, 'This phone has a save', f'{self.win.phone_name()} has the app from before the launcher, with its game and save. Installing updates the app '
-                        '(its data stays), moves the game folder into the launcher and the app copies the save to the game the next time it opens; the old save is left as it was.\n\n'
-                        'Back up its saves first (Phones), and try this on a phone whose save you can lose before the one you care about.', QMessageBox.Cancel, self)
-        go = b.addButton('Install anyway', QMessageBox.DestructiveRole); b.setDefaultButton(QMessageBox.Cancel); b.exec()
+        b = QMessageBox(QMessageBox.Warning, L.t('This phone has a save', '这台手机上有存档'), L.t(f'{self.win.phone_name()} has the app from before the launcher, with its game and save. Installing updates the app (its data stays), moves the game folder into the launcher and the app copies the save to the game the next time it opens; the old save is left as it was.\n\nBack up its saves first (Phones), and try this on a phone whose save you can lose before the one you care about.', f'{self.win.phone_name()} 上还是启动器之前的老应用，带着它的游戏和存档。安装会更新应用（数据保留）、把游戏文件夹挪进启动器，应用下次打开时会把存档复制给那个游戏；旧存档保持原样。\n\n先在「手机」页备份它的存档，并且先在一台存档丢了也无所谓的手机上试，再动你在意的那台。'), QMessageBox.Cancel, self)
+        go = b.addButton(L.t('Install anyway', '仍然安装'), QMessageBox.DestructiveRole); b.setDefaultButton(QMessageBox.Cancel); b.exec()
         return b.clickedButton() is go
     def options(self):
         g = self.current()
@@ -590,38 +583,37 @@ class LibraryPage(QWidget):
         for c, n in LANGUAGES:
             if c in g.languages: lang.addItem(f'{n} ({c})', c)
         i = lang.findData(self.win.st.value(f'lang/{g.id}', 'en-US')); lang.setCurrentIndex(max(i, 0))
-        f.addRow(label('Version to pack', 'meta'), ver); f.addRow(label('Game language', 'meta'), lang)
-        f.addRow(label('The language is the default on the phone; the app\'s settings screen changes it too.', 'muted', wrap=True))
+        f.addRow(label(L.t('Version to pack', '要打包的版本'), 'meta'), ver); f.addRow(label(L.t('Game language', '游戏语言'), 'meta'), lang)
+        f.addRow(label(L.t('The language is the default on the phone; the app\'s settings screen changes it too.', '这个语言是手机上的默认语言；也可以在应用的设置页里改。'), 'muted', wrap=True))
         s = self.win.serial(); cards = self.sd_cards(s) if s else []; saved = gd.valid(self.win.st.value(f'data/{g.id}', gd.PHONE))
         where = QComboBox(); where.addItem(gd.LABELS[gd.PHONE], gd.PHONE)
-        if gd.offered(cards) or saved == gd.SD: where.addItem(gd.LABELS[gd.SD] + ('' if gd.offered(cards) else ' (not in the picked phone)'), gd.SD)   # a saved choice stays shown, and changeable, when the card is out
+        if gd.offered(cards) or saved == gd.SD: where.addItem(gd.LABELS[gd.SD] + ('' if gd.offered(cards) else L.t(' (not in the picked phone)', '（不在已选中的手机里）')), gd.SD)   # a saved choice stays shown, and changeable, when the card is out
         where.setCurrentIndex(max(where.findData(saved), 0))
-        f.addRow(label('Game data', 'meta'), where)
+        f.addRow(label(L.t('Game data', '游戏数据'), 'meta'), where)
         f.addRow(label(gd.MEANING if gd.offered(cards) or saved == gd.SD else gd.no_card_note(cards), 'muted', wrap=True))
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel); bb.accepted.connect(d.accept); bb.rejected.connect(d.reject); f.addRow(bb)
         if d.exec(): self.win.st.setValue(f'ver/{g.id}', ver.currentData()); self.win.st.setValue(f'lang/{g.id}', lang.currentData()); self.win.st.setValue(f'data/{g.id}', where.currentData())
     def fill_menu(self):
         self.menu.clear(); g = self.current(); s = self.win.serial()
-        if not g: self.menu.addAction('Add a game…', self.win.add_game); return
+        if not g: self.menu.addAction(L.t('Add a game…', '添加游戏…'), self.win.add_game); return
         def act(text, fn, on=True): a = self.menu.addAction(text, fn); a.setEnabled(on); return a
-        act('Build and install', lambda: self.run(g, [], 'Build'), bool(g.profile and s))
-        act('Build only', lambda: self.run(g, ['--no-push'], 'Build'), bool(g.profile))
-        act('Build a game app…', lambda: self.game_app(g), bool(g.profile))
-        act('Install on phone (no build)', lambda: self.run(g, ['--push-only'], 'Install'), bool(g.profile and g.host and s))
+        act(L.t('Build and install', '构建并安装'), lambda: self.run(g, [], L.t('Build', '构建')), bool(g.profile and s))
+        act(L.t('Build only', '只构建'), lambda: self.run(g, ['--no-push'], L.t('Build', '构建')), bool(g.profile))
+        act(L.t('Build a game app…', '构建游戏应用…'), lambda: self.game_app(g), bool(g.profile))
+        act(L.t('Install on phone (no build)', '安装到手机（不构建）'), lambda: self.run(g, ['--push-only'], L.t('Install', '安装')), bool(g.profile and g.host and s))
         n = g.new_shaders(self.win.phone_games)
-        act(f'Update shaders from the phone ({n} new)' if n else 'Update shaders from the phone', lambda: self.run(g, ['--update-shaders'], 'Update shaders'), bool(g.provisional and g.host and s))
+        act(L.t(f'Update shaders from the phone ({n} new)', f'从手机取回着色器（{n} 个新的）') if n else L.t('Update shaders from the phone', '从手机取回着色器'), lambda: self.run(g, ['--update-shaders'], L.t('Update shaders', '更新着色器')), bool(g.provisional and g.host and s))
         self.menu.addSeparator()
-        act('Update the app on the phone', lambda: self.win.builds.start('Update the app', ['--apk-only', '--serial', s], after=self.after_task), bool(s and ba.library()))
-        act('Remove from the phone…', lambda: self.win.phones.remove_game(g.id, g.name), bool(s and g.id in self.win.phone_games))
-        act('Import a save to the phone…', lambda: self.win.phones.import_save(g.id, g.name), bool(s and g.id in self.win.phone_games))
-        act('Restore its save from a backup…', lambda: self.win.phones.restore_backup(g.id, g.name), bool(s and g.id in self.win.phone_games))
+        act(L.t('Update the app on the phone', '更新手机上的应用'), lambda: self.win.builds.start(L.t('Update the app', '更新应用'), ['--apk-only', '--serial', s], after=self.after_task), bool(s and ba.library()))
+        act(L.t('Remove from the phone…', '从手机上移除…'), lambda: self.win.phones.remove_game(g.id, g.name), bool(s and g.id in self.win.phone_games))
+        act(L.t('Import a save to the phone…', '把存档导入手机…'), lambda: self.win.phones.import_save(g.id, g.name), bool(s and g.id in self.win.phone_games))
+        act(L.t('Restore its save from a backup…', '从备份恢复它的存档…'), lambda: self.win.phones.restore_backup(g.id, g.name), bool(s and g.id in self.win.phone_games))
         self.menu.addSeparator()
-        act('Open the game folder', lambda: reveal(g.folder))
-        act('Remove from the collection…', lambda: self.remove(g))
+        act(L.t('Open the game folder', '打开游戏文件夹'), lambda: reveal(g.folder))
+        act(L.t('Remove from the collection…', '从收藏里移除…'), lambda: self.remove(g))
     def remove(self, g):
-        if QMessageBox.question(self, 'Remove', f'Remove {g.name} from the collection? Its files are not deleted.') != QMessageBox.Yes: return
-        if g.id in ba.library() and QMessageBox.question(self, 'Remove', 'Also take it out of the app (its host on this computer)? The next app update leaves it out; '
-                                                         'the game files and the save on the phone stay.') == QMessageBox.Yes:
+        if QMessageBox.question(self, L.t('Remove', '移除'), L.t(f'Remove {g.name} from the collection? Its files are not deleted.', f'把 {g.name} 从收藏里移除？它的文件不会被删除。')) != QMessageBox.Yes: return
+        if g.id in ba.library() and QMessageBox.question(self, L.t('Remove', '移除'), L.t('Also take it out of the app (its host on this computer)? The next app update leaves it out; the game files and the save on the phone stay.', '也把它从应用里拿掉（这台电脑上它的 host）？下次更新应用就不会带上它；游戏文件和手机上的存档保留。')) == QMessageBox.Yes:
             shutil.rmtree(ba.data_dir() / 'hosts' / g.id, ignore_errors=True)
         self.win.st.setValue('folders', [f for f in self.folders() if f != g.folder]); self.games.pop(g.folder, None); self.render()
 
@@ -637,13 +629,13 @@ class FailBanner(QFrame):   # a build that failed, at the top of the Builds page
         self.raw = label('', 'muted', wrap=True); self.raw.setTextInteractionFlags(Qt.TextSelectableByMouse); lay.addWidget(self.raw)   # the message itself, to search or quote
         row = QHBoxLayout(); row.setSpacing(10); lay.addSpacing(6); lay.addLayout(row)
         self.act = QPushButton(); self.act.clicked.connect(lambda: self.help and page.win.act(self.help.action, page.context()[0]['folder'])); row.addWidget(self.act)
-        self.copy = QPushButton('Copy report'); self.copy.clicked.connect(page.copy_report); row.addWidget(self.copy)
-        save = QPushButton('Save full report…'); save.setObjectName('ghost'); save.clicked.connect(page.save_report); row.addWidget(save)
-        self.discord = QPushButton('Open Discord'); self.discord.setObjectName('ghost'); self.discord.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(ex.DISCORD))); row.addWidget(self.discord)
+        self.copy = QPushButton(L.t('Copy report', '复制报告')); self.copy.clicked.connect(page.copy_report); row.addWidget(self.copy)
+        save = QPushButton(L.t('Save full report…', '保存完整报告…')); save.setObjectName('ghost'); save.clicked.connect(page.save_report); row.addWidget(save)
+        self.discord = QPushButton(L.t('Open Discord', '打开 Discord')); self.discord.setObjectName('ghost'); self.discord.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(ex.DISCORD))); row.addWidget(self.discord)
         row.addStretch(); self.hide()
     def show_help(self, h, raw):
         self.help = h; self.title.setText(h.title); self.body.setText(h.body)
-        raw = raw.strip(); self.raw.setText(f'What it said: {raw[:400]}{"…" if len(raw) > 400 else ""}' if raw else ''); self.raw.setVisible(bool(raw))
+        raw = raw.strip(); self.raw.setText(L.t(f'What it said: {raw[:400]}{"…" if len(raw) > 400 else ""}', f'它说的是：{raw[:400]}{"…" if len(raw) > 400 else ""}') if raw else ''); self.raw.setVisible(bool(raw))
         self.act.setText(h.label); self.act.setVisible(bool(h.action)); self.discord.setVisible(h.bug)
         for b, primary in ((self.act, bool(h.action)), (self.copy, not h.action)):   # the one thing to do now in cream: the fix, or the report when only a fix in DroidPlay helps
             b.setObjectName('next' if primary else ''); b.style().unpolish(b); b.style().polish(b)
@@ -660,15 +652,15 @@ class BuildsPage(QWidget):
         self.gpus = {}   # serial → the GPU its SurfaceFlinger names, for the reports
         self.ids = set(); self.ext = None   # this app's builds (their journals are skipped: their events come on stdout); the console build followed: {path, pid, pos}
         lay = QVBoxLayout(self); lay.setContentsMargins(48, 32, 48, 24); lay.setSpacing(16)
-        self.head = label('Builds', 'h1'); lay.addWidget(self.head); self.sub = label('Nothing running. Builds start from the Library.', 'muted'); lay.addWidget(self.sub)
+        self.head = label(L.t('Builds', '构建记录'), 'h1'); lay.addWidget(self.head); self.sub = label(L.t('Nothing running. Builds start from the Library.', '没有在跑的任务。构建从游戏库发起。'), 'muted'); lay.addWidget(self.sub)
         self.banner = FailBanner(self); lay.addWidget(self.banner)
-        self.tree = QTreeWidget(); self.tree.setHeaderLabels(['Stage', 'Progress', 'Time', 'Result']); self.tree.setRootIsDecorated(False)
+        self.tree = QTreeWidget(); self.tree.setHeaderLabels([L.t('Stage', '阶段'), L.t('Progress', '进度'), L.t('Time', '用时'), L.t('Result', '结果')]); self.tree.setRootIsDecorated(False)
         hh = self.tree.header(); hh.setStretchLastSection(False); hh.setSectionResizeMode(0, QHeaderView.Stretch); hh.setSectionResizeMode(1, QHeaderView.Fixed)
         hh.setSectionResizeMode(2, QHeaderView.ResizeToContents); hh.setSectionResizeMode(3, QHeaderView.Stretch); self.tree.setColumnWidth(1, 220)
         self.tree.setTextElideMode(Qt.ElideMiddle)   # a long step or path keeps both ends; the whole text is the cell's tooltip
         self.tree.setSelectionMode(QTreeWidget.NoSelection); self.tree.setFocusPolicy(Qt.NoFocus); lay.addWidget(self.tree, 2)   # a selected row lost its result's colour
         self.log = QPlainTextEdit(); self.log.setObjectName('log'); self.log.setReadOnly(True); lay.addWidget(self.log, 3)
-        row = QHBoxLayout(); b = QPushButton('Open the app folder'); b.setObjectName('ghost'); b.clicked.connect(lambda: reveal(ba.data_dir()))
+        row = QHBoxLayout(); b = QPushButton(L.t('Open the app folder', '打开应用文件夹')); b.setObjectName('ghost'); b.clicked.connect(lambda: reveal(ba.data_dir()))
         row.addWidget(b); row.addStretch(); lay.addLayout(row)
         self.live = None   # (the running stage's row, its detail, its fraction or -1)
         self.jt = QTimer(self); self.jt.timeout.connect(self.follow); self.jt.timeout.connect(self.tick); self.jt.start(1000)
@@ -684,7 +676,7 @@ class BuildsPage(QWidget):
                 except (OSError, ValueError): continue
                 if first.get('id') in self.ids or '"ev": "exit"' in text or not alive(int(first.get('pid') or 0)): continue
                 self.ext = {'path': f, 'pid': int(first['pid']), 'pos': 0}; self.title = journal_title(first.get('argv') or [])
-                self.head.setText(self.title + '  ·  from the console'); self.sub.setText('following its journal'); self.tree.clear(); self.items = {}; self.log.clear(); self.buf = ''
+                self.head.setText(self.title + L.t('  ·  from the console', '  ·  来自命令行')); self.sub.setText(L.t('following its journal', '正在跟踪它的日志')); self.tree.clear(); self.items = {}; self.log.clear(); self.buf = ''
                 self.fresh(first.get('argv') or [], None); self.journal = f; self.last = (self.title, first.get('argv') or [], None)   # Install again runs it here
                 self.t0 = first.get('t') or time.time(); self.say('$ build_android_from_nsp.py ' + ' '.join(first.get('argv') or []), TEXT3)
                 self.progress.emit(self.title, 'running', -1, True); break
@@ -702,13 +694,13 @@ class BuildsPage(QWidget):
         if done is None and not alive(self.ext['pid']): done = -1
         if done is not None:
             ok = done == 0; self.ext = None; self.live = None
-            self.say('— the console build ' + ('finished' if ok else 'stopped' if done == -1 else f'failed (exit {done})'), READY if ok else ERR)
+            self.say(L.t('— the console build ', '— 命令行构建') + (L.t('finished', '已完成') if ok else L.t('stopped', '已停止') if done == -1 else L.t(f'failed (exit {done})', f'失败（退出码 {done}）')), READY if ok else ERR)
             h = self.show_failure() if not ok and done != -1 else None
-            self.sub.setText(f'done · {self.ended(ok)}' if ok else 'stopped' if done == -1 else h.title if h else '')
+            self.sub.setText(L.t(f'done · {self.ended(ok)}', f'完成 · {self.ended(ok)}') if ok else 'stopped' if done == -1 else h.title if h else '')
             self.progress.emit(self.title, self.ended(ok) if ok else h.title if h else 'stopped', 1.0 if ok else -1, False)
             if ok: self.win.library.after_task()
     def start(self, title, args, after=None):
-        if self.busy() or self.ext: QMessageBox.warning(self, 'Busy', 'A build is running: wait for it or stop it'); return
+        if self.busy() or self.ext: QMessageBox.warning(self, L.t('Busy', '正忙'), L.t('A build is running: wait for it or stop it', '有构建正在跑：等它结束，或者把它停掉')); return
         self.live = None; self.title = title; self.head.setText(title); self.sub.setText('starting…'); self.tree.clear(); self.items = {}; self.log.clear(); self.after = after; self.buf = ''
         if '--serial' in args[:-1] and '--phone-id' not in args and (pid := self.win.ids.get(args[args.index('--serial') + 1])):
             args = [*args, '--phone-id', pid]   # the script finds the phone by its ID when adb loses it on the way (a new Wi-Fi port)
@@ -747,7 +739,7 @@ class BuildsPage(QWidget):
             self.failed_stage = (ev.get('k'), self.stage[1] if self.stage and self.stage[0] == ev.get('k') else None, ev.get('name', ''))
         key = ev.get('k'); it = self.items.get(key)
         if it is None:
-            it = QTreeWidgetItem([f'{key}/{ev.get("n", "?")}   {ev.get("name", "")}', '', '', '']); self.tree.addTopLevelItem(it); self.items[key] = it
+            it = QTreeWidgetItem([L.t(f'{key}/{ev.get("n", "?")}   {ev.get("name", "")}', f'{key}/{ev.get("n", "?")}   {ev.get("name", "")}'), '', '', '']); self.tree.addTopLevelItem(it); self.items[key] = it
             bar = QProgressBar(); bar.setRange(0, 0); bar.setTextVisible(False); self.tree.setItemWidget(it, 1, bar); it.t0 = ev.get('t') or time.time(); it.n = ev.get('n', '?'); it.name = ev.get('name', '')
         bar = self.tree.itemWidget(it, 1); frac = -1.0
         if ev.get('step'): it.setText(0, f'{key}/{it.n}   {it.name} · {ev["step"]}')
@@ -761,8 +753,8 @@ class BuildsPage(QWidget):
         if k == 'stage_end':
             bar.setRange(0, 1); bar.setValue(1); tint(bar, READY if ev.get('ok') else ERR); it.setText(0, f'{key}/{it.n}   {it.name}'); it.setToolTip(0, it.text(0))   # its last step was not still going on
             it.setText(2, clock_text(ev.get('elapsed', 0))); it.setText(3, ev.get('summary', '')); it.setToolTip(3, ev.get('summary', '')); it.setForeground(3, QColor(READY if ev.get('ok') else ERR))
-            detail = f'{it.name} done'; frac = 1.0; QTimer.singleShot(0, self.win.library.reload)
-        self.sub.setText(f'stage {key} of {it.n} · {detail}')
+            detail = L.t(f'{it.name} done', f'{it.name} · 完成'); frac = 1.0; QTimer.singleShot(0, self.win.library.reload)
+        self.sub.setText(L.t(f'stage {key} of {it.n} · {detail}', f'阶段 {key}，共 {it.n} · {detail}'))
         self.live = None if k == 'stage_end' else (it, detail, frac if frac >= 0 else (self.live[2] if self.live and self.live[0] is it and k != 'step' else -1))
         self.progress.emit(self.title, detail, self.live[2] if self.live else frac, True)
     def tick(self):   # the running stage's clock, every second: a long step (adb copying the RomFS) sends no events
@@ -773,14 +765,14 @@ class BuildsPage(QWidget):
         self.read()
         ok = code == 0; self.live = None
         if self.stopping:   # the player pressed Stop: nothing went wrong to explain
-            self.say(f'— stopped after {time.time() - self.t0:.0f} s', TEXT3); self.sub.setText('stopped'); self.progress.emit(self.title, 'stopped', -1, False); self.after = None; return
-        self.say(f'— finished in {time.time() - self.t0:.0f} s, exit {code}', READY if ok else ERR)
+            self.say(L.t(f'— stopped after {time.time() - self.t0:.0f} s', f'— 停止，用时 {time.time() - self.t0:.0f} 秒'), TEXT3); self.sub.setText('stopped'); self.progress.emit(self.title, 'stopped', -1, False); self.after = None; return
+        self.say(L.t(f'— finished in {time.time() - self.t0:.0f} s, exit {code}', f'— 完成，用时 {time.time() - self.t0:.0f} 秒，退出码 {code}'), READY if ok else ERR)
         h = None if ok else self.show_failure()
-        self.sub.setText(f'done · {self.ended(ok)}' if ok else h.title if h else '')
+        self.sub.setText(L.t(f'done · {self.ended(ok)}', f'完成 · {self.ended(ok)}') if ok else h.title if h else '')
         self.progress.emit(self.title, self.ended(ok) if ok else h.title if h else '', 1.0 if ok else -1, False)
         after, self.after = self.after, None
         if ok and after: QTimer.singleShot(200, after)
-        if h: self.win.toast(f'{h.title}: see Builds')
+        if h: self.win.toast(L.t(f'{h.title}: see Builds', f'{h.title}：去看构建记录'))
     def retry(self):   # a failed build's Install again / Try again: the same build, which reuses what it made before, on the same phone by its ID: over Wi-Fi its serial
         # changes when wireless debugging restarts, and the old one named no device any more
         if not self.last: return
@@ -813,15 +805,15 @@ class BuildsPage(QWidget):
         def got(gp):
             info['gpu'] = self.gpus[serial] = '' if isinstance(gp, Exception) else gp
             QApplication.clipboard().setText(ex.markdown_report(info, reds, lines, str(Path.home())))
-            self.win.toast('The report is copied: paste it in #help on the DroidPlay Discord')
+            self.win.toast(L.t('The report is copied: paste it in #help on the DroidPlay Discord', '报告已复制：粘贴到 DroidPlay Discord 的 #help 频道'))
         bg(gpu, got)
     def save_report(self):   # the whole log and where its journal is, redacted the same way
         info, serial = self.report_info(); info['gpu'] = self.gpus.get(serial, '')   # as Copy report asked the phone, if it did
-        f, _ = QFileDialog.getSaveFileName(self, 'Save the full report', str(Path.home() / 'Documents' / f'DroidPlay report {time.strftime("%Y-%m-%d %H%M")}.txt'), 'Text (*.txt)')
+        f, _ = QFileDialog.getSaveFileName(self, L.t('Save the full report', '保存完整报告'), str(Path.home() / 'Documents' / f'DroidPlay report {time.strftime("%Y-%m-%d %H%M")}.txt'), L.t('Text (*.txt)', '文本 (*.txt)'))
         if not f: return
         try: Path(f).write_text(ex.full_report(info, self.log.toPlainText(), self.journal_path() or '', str(Path.home())), encoding='utf-8')
-        except OSError as e: QMessageBox.warning(self, 'Save full report', str(e)); return
-        self.win.toast(f'Saved {Path(f).name}: attach it in #help on the DroidPlay Discord')
+        except OSError as e: QMessageBox.warning(self, L.t('Save full report', '保存完整报告'), str(e)); return
+        self.win.toast(L.t(f'Saved {Path(f).name}: attach it in #help on the DroidPlay Discord', f'已保存 {Path(f).name}：把它附在 DroidPlay Discord 的 #help 里'))
     def journal_path(self):   # this build's journal (<data>/builds), which has every event and message
         if self.journal: return self.journal
         d = ba.data_dir() / 'builds'
@@ -833,12 +825,12 @@ class BuildsPage(QWidget):
             except OSError: continue
         return None
     def ended(self, ok):   # what the bar says under "<build> — done" or "— failed", rather than the same word again
-        if not ok: return 'see the messages on the Builds page'
+        if not ok: return L.t('see the messages on the Builds page', '去构建记录页看消息')
         n = len(self.items); took = clock_text(time.time() - self.t0)
-        return f'{n} stage{"" if n == 1 else "s"} in {took}' if n else f'took {took}'
+        return f'{n} stage{"" if n == 1 else "s"} in {took}' if n else L.t(f'took {took}', f'用时 {took}')
     def stop(self):
         if self.ext:   # a console build: its process tree
-            if QMessageBox.question(self, 'Stop', f'Stop {self.title}, started from the console?') != QMessageBox.Yes: return
+            if QMessageBox.question(self, L.t('Stop', '停止'), L.t(f'Stop {self.title}, started from the console?', f'停止 {self.title}？它是从命令行启动的。')) != QMessageBox.Yes: return
             if os.name == 'nt': subprocess.run(['taskkill', '/T', '/F', '/PID', str(self.ext['pid'])], capture_output=True, creationflags=NOWINDOW)
             else: os.kill(self.ext['pid'], 15)
             return
@@ -857,12 +849,12 @@ class BuildBar(QWidget):   # the running build at the bottom of every page
         col.addWidget(self.title); col.addWidget(self.detail); lay.addLayout(col, 3)
         self.bar = QProgressBar(); self.bar.setRange(0, 1000); self.bar.setTextVisible(False); lay.addWidget(self.bar, 4)
         self.pct = label(''); self.pct.setStyleSheet(f'font-size: 15px; font-weight: 600; color: {TEXT2}'); self.pct.setMinimumWidth(48); lay.addWidget(self.pct)
-        self.view = QPushButton('View build'); self.view.clicked.connect(lambda: win.go('builds')); lay.addWidget(self.view)
-        self.stop = QPushButton('Stop'); self.stop.setObjectName('stop'); self.stop.clicked.connect(win.stop_build); lay.addWidget(self.stop)
+        self.view = QPushButton(L.t('View build', '查看构建')); self.view.clicked.connect(lambda: win.go('builds')); lay.addWidget(self.view)
+        self.stop = QPushButton(L.t('Stop', '停止')); self.stop.setObjectName('stop'); self.stop.clicked.connect(win.stop_build); lay.addWidget(self.stop)
         self.hide(); self.hide_timer = QTimer(self); self.hide_timer.setSingleShot(True); self.hide_timer.timeout.connect(self.hide)
     def update_from(self, title, detail, frac, running):
         self.show(); self.hide_timer.stop()
-        self.title.setText(f'{title} in progress' if running else title + (' — done' if frac >= 0 else ' — failed'))
+        self.title.setText(L.t(f'{title} in progress', f'{title}进行中') if running else title + (' — done' if frac >= 0 else ' — failed'))
         self.detail.setText(detail); tint(self.bar, BUILD if running else READY if frac >= 0 else ERR)
         if frac < 0: self.bar.setRange(0, 0 if running else 1000); self.pct.setText('')
         else: self.bar.setRange(0, 1000); self.bar.setValue(int(frac * 1000)); self.pct.setText(f'{frac * 100:.0f}%')
@@ -878,26 +870,26 @@ class KeepColour(QStyledItemDelegate):   # a selected row keeps its coloured tex
         if fg is not None: opt.palette.setBrush(QPalette.HighlightedText, fg)
 
 
-STATES = {'device': 'connected', 'unauthorized': 'allow USB debugging on the phone', 'authorizing': 'allow USB debugging on the phone', 'offline': 'offline'}   # adb's words
-NO_ADB = "adb isn't installed, so DroidPlay can't see your phones. It comes with the tools: Get started, step 2."
-NO_PHONE = (f'No phone connected. Plug one in with USB debugging on and allow this computer when the phone asks, or pair one over Wi-Fi. '
-            f'<a style="color:{READY}" href="guide">How to connect a phone</a>')
+STATES = {'device': 'connected', 'unauthorized': L.t('allow USB debugging on the phone', '在手机上允许 USB 调试'), 'authorizing': L.t('allow USB debugging on the phone', '在手机上允许 USB 调试'), 'offline': 'offline'}   # adb's words
+NO_ADB = L.t("adb isn't installed, so DroidPlay can't see your phones. It comes with the tools: Get started, step 2.", "adb 还没装，所以 DroidPlay 看不到你的手机。它随工具一起安装：开始使用，第 2 步。")
+NO_PHONE = L.t(f'No phone connected. Plug one in with USB debugging on and allow this computer when the phone asks, or pair one over Wi-Fi. <a style="color:{READY}" href="guide">How to connect a phone</a>',
+               f'没有连接手机。插上一台、打开 USB 调试，并且在手机询问时允许这台电脑；或者用 Wi-Fi 配对一台。<a style="color:{READY}" href="guide">怎么连手机</a>')
 
 
 class PhoneGuide(QDialog):   # how to connect a phone, by brand (dm/android/desktop/phone_guide.py), with what DroidPlay sees now at its foot, live
     def __init__(self, win):
-        super().__init__(win); self.win = win; self.setWindowTitle('Set up your phone'); self.setStyleSheet(STYLE + f'QDialog {{ background: {PANEL}; }}')
+        super().__init__(win); self.win = win; self.setWindowTitle(L.t('Set up your phone', '设置你的手机')); self.setStyleSheet(STYLE + f'QDialog {{ background: {PANEL}; }}')
         outer = QVBoxLayout(self); outer.setContentsMargins(0, 0, 0, 0); outer.setSpacing(0)
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); outer.addWidget(scroll, 1)
         body = QWidget(); body.setStyleSheet('background: transparent'); scroll.setWidget(body)
         lay = QVBoxLayout(body); lay.setContentsMargins(28, 24, 28, 8); lay.setSpacing(12)
-        lay.addWidget(label('Set up your phone', 'h2')); lay.addWidget(label(pg.INTRO, 'meta', wrap=True))
-        row = QHBoxLayout(); row.addWidget(label('Your phone is a', 'meta')); self.brand = QComboBox()
+        lay.addWidget(label(L.t('Set up your phone', '设置你的手机'), 'h2')); lay.addWidget(label(pg.INTRO, 'meta', wrap=True))
+        row = QHBoxLayout(); row.addWidget(label(L.t('Your phone is a', '你的手机是'), 'meta')); self.brand = QComboBox()
         for k, name, *_ in pg.BRANDS: self.brand.addItem(name, k)
         row.addWidget(self.brand, 1); lay.addLayout(row)
         self.steps = label('', wrap=True); self.steps.setTextFormat(Qt.RichText); self.steps.setStyleSheet('font-size: 14px'); lay.addWidget(self.steps)
         self.note = label('', 'muted', wrap=True); self.note.setTextFormat(Qt.RichText); self.note.setOpenExternalLinks(True); lay.addWidget(self.note)
-        self.more = QToolButton(); self.more.setObjectName('manage'); self.more.setText(" If it doesn't work"); self.more.setCheckable(True); self.more.setCursor(Qt.PointingHandCursor)
+        self.more = QToolButton(); self.more.setObjectName('manage'); self.more.setText(L.t(" If it doesn't work", " 如果不行")); self.more.setCheckable(True); self.more.setCursor(Qt.PointingHandCursor)
         self.more.setIcon(icon('right', TEXT, 16)); self.more.setToolButtonStyle(Qt.ToolButtonTextBesideIcon); lay.addWidget(self.more)
         link = lambda h: h.replace('<a ', f'<a style="color:{READY}" ')   # noqa: E731  (the app's green, not the palette's blue on the dark panel)
         self.trouble = label(link(''.join(f'<p><b>{t}{"" if t[-1] in "?!." else "."}</b> {x}</p>' for t, x in pg.TROUBLE)), 'meta', wrap=True); self.trouble.setTextFormat(Qt.RichText)
@@ -905,7 +897,7 @@ class PhoneGuide(QDialog):   # how to connect a phone, by brand (dm/android/desk
         self.more.toggled.connect(lambda on: (self.trouble.setVisible(on), self.more.setIcon(icon('down' if on else 'right', TEXT, 16))))
         foot = QWidget(); fl = QHBoxLayout(foot); fl.setContentsMargins(28, 12, 28, 22); fl.setSpacing(16)
         self.seen = label('', 'meta', wrap=True); self.seen.setTextFormat(Qt.RichText); fl.addWidget(self.seen, 1)
-        done = QPushButton('Done'); done.setMinimumWidth(110); done.clicked.connect(self.accept); fl.addWidget(done); outer.addWidget(foot)
+        done = QPushButton(L.t('Done', '完成')); done.setMinimumWidth(110); done.clicked.connect(self.accept); fl.addWidget(done); outer.addWidget(foot)
         sep = QFrame(); sep.setFixedHeight(1); sep.setStyleSheet(f'background: {LINE}'); outer.insertWidget(1, sep)
         self.brand.setCurrentIndex(max(0, self.brand.findData(win.phone_brand()))); self.brand.currentIndexChanged.connect(self.show_brand); self.show_brand()
         self.t = QTimer(self); self.t.timeout.connect(self.watch); self.t.start(1000); self.watch()
@@ -918,8 +910,8 @@ class PhoneGuide(QDialog):   # how to connect a phone, by brand (dm/android/desk
     def watch(self):   # the checklist's phone step, as DroidPlay sees it now (it looks every few seconds)
         s = fr.phone_step(self.win.devs, self.win.adb, self.win.serial())
         c = READY if s.done else BUILD if s.state in (fr.WAITING, fr.WORKING) else ERR if s.state == fr.PROBLEM else TEXT2
-        text = (f'✓ DroidPlay sees {s.text}' if s.done else s.text if s.state != fr.TODO else "DroidPlay doesn't see a phone yet: it looks every few seconds." if self.win.adb
-                else 'DroidPlay finds phones with adb, which comes with the tools: install them first (Get started, step 2).')
+        text = (L.t(f'✓ DroidPlay sees {s.text}', f'✓ DroidPlay 看到 {s.text}') if s.done else s.text if s.state != fr.TODO else L.t("DroidPlay doesn't see a phone yet: it looks every few seconds.", "DroidPlay 还没看到手机：它每隔几秒会再看一次。") if self.win.adb
+                else L.t('DroidPlay finds phones with adb, which comes with the tools: install them first (Get started, step 2).', 'DroidPlay 用 adb 找手机，adb 随工具一起安装：请先装工具（开始使用，第 2 步）。'))
         self.seen.setText(f'<span style="color:{c}">{text}</span>')
 
 
@@ -928,17 +920,17 @@ class PairDialog(QDialog):   # Pair over Wi-Fi: the phones showing a pairing cod
     # by hand before, the second one easy to get wrong (the Wireless debugging screen's, not the pairing one's)
     WAIT = 10   # seconds after pairing for adb to connect to the phone by itself, before DroidPlay connects to it, or asks for the address
     def __init__(self, win):
-        super().__init__(win); self.win = win; self.setWindowTitle('Pair over Wi-Fi'); self.setStyleSheet(STYLE + f'QDialog {{ background: {PANEL}; }}'); self.setMinimumWidth(560)
+        super().__init__(win); self.win = win; self.setWindowTitle(L.t('Pair over Wi-Fi', 'Wi-Fi 配对')); self.setStyleSheet(STYLE + f'QDialog {{ background: {PANEL}; }}'); self.setMinimumWidth(560)
         lay = QVBoxLayout(self); lay.setContentsMargins(28, 24, 28, 22); lay.setSpacing(12)
-        lay.addWidget(label('Pair over Wi-Fi', 'h2'))
+        lay.addWidget(label(L.t('Pair over Wi-Fi', 'Wi-Fi 配对'), 'h2'))
         steps = label('<ol style="margin: 0">' + ''.join(f'<li style="margin-bottom: 6px">{x}</li>' for x in wifi.STEPS) + '</ol>', wrap=True); steps.setTextFormat(Qt.RichText); lay.addWidget(steps)
         self.list = QListWidget(); self.list.setMaximumHeight(110); lay.addWidget(self.list)
-        self.addr = QLineEdit(); self.addr.setPlaceholderText('Not listed? The IP address & port shown with the code, e.g. 192.168.1.20:37123'); lay.addWidget(self.addr)
-        row = QHBoxLayout(); row.addWidget(label('Pairing code', 'meta')); self.code = QLineEdit(); self.code.setMaxLength(6); self.code.setPlaceholderText('6 digits'); self.code.setFixedWidth(120)
+        self.addr = QLineEdit(); self.addr.setPlaceholderText(L.t('Not listed? The IP address & port shown with the code, e.g. 192.168.1.20:37123', '列表里没有？填配对码旁边显示的 IP 和端口，例如 192.168.1.20:37123')); lay.addWidget(self.addr)
+        row = QHBoxLayout(); row.addWidget(label(L.t('Pairing code', '配对码'), 'meta')); self.code = QLineEdit(); self.code.setMaxLength(6); self.code.setPlaceholderText('6 digits'); self.code.setFixedWidth(120)
         row.addWidget(self.code); row.addStretch(); lay.addLayout(row)
         self.status = label('', 'meta', wrap=True); self.status.setTextFormat(Qt.RichText); lay.addWidget(self.status)
-        foot = QHBoxLayout(); foot.addStretch(); cancel = QPushButton('Cancel'); cancel.clicked.connect(self.reject); foot.addWidget(cancel)
-        self.go = QPushButton('Pair'); self.go.setDefault(True); self.go.clicked.connect(self.pair); foot.addWidget(self.go); lay.addLayout(foot)
+        foot = QHBoxLayout(); foot.addStretch(); cancel = QPushButton(L.t('Cancel', '取消')); cancel.clicked.connect(self.reject); foot.addWidget(cancel)
+        self.go = QPushButton(L.t('Pair', '配对')); self.go.setDefault(True); self.go.clicked.connect(self.pair); foot.addWidget(self.go); lay.addLayout(foot)
         for w in (self.code, self.addr): w.textChanged.connect(self.ready)
         self.list.currentItemChanged.connect(self.ready); self.code.returnPressed.connect(self.pair)
         self.busy, self.found, self.deadline, self.target = False, [], 0.0, ('', None)
@@ -955,7 +947,7 @@ class PairDialog(QDialog):   # Pair over Wi-Fi: the phones showing a pairing cod
             it = QListWidgetItem(text); it.setData(Qt.UserRole, addr); self.list.addItem(it)
             if addr == keep or len(found) == 1: self.list.setCurrentItem(it)
         if not found:
-            it = QListWidgetItem('Looking for a phone showing a pairing code…'); it.setFlags(Qt.NoItemFlags); self.list.addItem(it)
+            it = QListWidgetItem(L.t('Looking for a phone showing a pairing code…', '正在找显示配对码的手机…')); it.setFlags(Qt.NoItemFlags); self.list.addItem(it)
         self.list.blockSignals(False); self.ready()
     def address(self):
         typed = self.addr.text().strip()
@@ -965,17 +957,17 @@ class PairDialog(QDialog):   # Pair over Wi-Fi: the phones showing a pairing cod
     def pair(self):
         addr, code = self.address(), self.code.text().strip()
         if not self.go.isEnabled() or not addr: return
-        self.busy = True; self.ready(); self.say('Pairing…', BUILD)
+        self.busy = True; self.ready(); self.say(L.t('Pairing…', '正在配对…'), BUILD)
         bg(lambda: adb_run(None, 'pair', addr, code, timeout=30), lambda r: self.paired(addr, r))
     def paired(self, addr, r):
         ok, sn, text = wifi.pair_result(*r) if not isinstance(r, Exception) else (False, None, str(r))
         if not ok: self.busy = False; self.ready(); self.say(text, ERR); return
-        self.say('Paired. Connecting…', BUILD); self.deadline = time.time() + self.WAIT; self.target = (addr.rsplit(':', 1)[0], sn); self.connect_paired()
+        self.say(L.t('Paired. Connecting…', '已配对，正在连接…'), BUILD); self.deadline = time.time() + self.WAIT; self.target = (addr.rsplit(':', 1)[0], sn); self.connect_paired()
     def connect_paired(self):   # adb connects a paired phone by itself when it sees it on the network; else the phone's own address is asked for its connection
         ip, sn = self.target
         def look():
             listed = wifi.listed(adb_run(None, 'devices', timeout=10)[1], sn, ip)
-            if listed: return True, f'connected to {listed}'
+            if listed: return True, L.t(f'connected to {listed}', f'已连接到 {listed}')
             to = wifi.connect_target(adb_run(None, 'mdns', 'services', timeout=8)[1], sn, ip)
             return wifi.connect_result(*adb_run(None, 'connect', to, timeout=15)) + (to,) if to else None
         def got(r):
@@ -985,27 +977,25 @@ class PairDialog(QDialog):   # Pair over Wi-Fi: the phones showing a pairing cod
             self.ask_address(ip)
         bg(look, got)
     def ask_address(self, ip):   # neither adb nor the network offered the phone's connection: the Wireless debugging screen's address, by hand
-        addr, ok = QInputDialog.getText(self, 'Connect', 'Paired. Now the IP address & port on the phone\'s Wireless debugging screen itself (not the pairing one):', text=f'{ip}:')
-        if not ok or not addr.strip(): self.busy = False; self.ready(); self.say('Paired, not connected: <b>Connect…</b> on the Phones page takes the address later.', BUILD); return
-        self.say('Connecting…', BUILD)
+        addr, ok = QInputDialog.getText(self, L.t('Connect', '连接'), L.t('Paired. Now the IP address & port on the phone\'s Wireless debugging screen itself (not the pairing one):', '已配对。现在填手机「无线调试」页面上显示的 IP 和端口（不是配对时那个）：'), text=f'{ip}:')
+        if not ok or not addr.strip(): self.busy = False; self.ready(); self.say(L.t('Paired, not connected: <b>Connect…</b> on the Phones page takes the address later.', '已配对但没连上：稍后可以在「手机」页用 <b>连接…</b> 填地址。'), BUILD); return
+        self.say(L.t('Connecting…', '正在连接…'), BUILD)
         def got(r):
             ok2, text = wifi.connect_result(*r) if not isinstance(r, Exception) else (False, str(r))
             if ok2: self.win.st.setValue('wifi', addr.strip()); self.connected()
             else: self.busy = False; self.ready(); self.say(text, ERR)
         bg(lambda: adb_run(None, 'connect', addr.strip(), timeout=30), got)
     def connected(self):   # not done(): that is QDialog's own, which accept() calls
-        self.t.stop(); self.win.refresh_devices(); self.win.toast('Connected over Wi-Fi: the phone is in the list at the top'); self.accept()
+        self.t.stop(); self.win.refresh_devices(); self.win.toast(L.t('Connected over Wi-Fi: the phone is in the list at the top', '已通过 Wi-Fi 连接：手机会出现在顶部的列表里')); self.accept()
 
 
 class PhonesPage(QWidget):
     def __init__(self, win):
         super().__init__(); self.win = win; self.setObjectName('page')
         lay = QVBoxLayout(self); lay.setContentsMargins(48, 32, 48, 24); lay.setSpacing(16)
-        lay.addWidget(label('Phones', 'h1'))
-        lay.addWidget(label('Over Wi-Fi (Android 11 and later): turn on Developer options › Wireless debugging and open "Pair device with pairing code"; Pair over Wi-Fi… '
-                            'then finds the phone and asks only for its code. For Connect… by hand, '
-                            'the address on the Wireless debugging screen itself is the one to Connect to (its port changes when wireless debugging restarts).', 'muted', wrap=True))
-        self.table = QTableWidget(0, 7); self.table.setHorizontalHeaderLabels(['Device', 'Model', 'Android', 'Battery', 'Free', 'Connection', 'State'])
+        lay.addWidget(label(L.t('Phones', '手机'), 'h1'))
+        lay.addWidget(label(L.t('Over Wi-Fi (Android 11 and later): turn on Developer options › Wireless debugging and open "Pair device with pairing code"; Pair over Wi-Fi… then finds the phone and asks only for its code. For Connect… by hand, the address on the Wireless debugging screen itself is the one to Connect to (its port changes when wireless debugging restarts).', '走 Wi-Fi（Android 11 及以上）：打开「开发者选项 › 无线调试」，再打开「使用配对码配对设备」；「Wi-Fi 配对…」随后会找到手机，只问它的配对码。手动「连接…」时，要连的是「无线调试」页面上显示的那个地址（无线调试重启后端口会变）。'), 'muted', wrap=True))
+        self.table = QTableWidget(0, 7); self.table.setHorizontalHeaderLabels([L.t('Device', '设备'), L.t('Model', '型号'), L.t('Android', '安卓'), L.t('Battery', '电量'), L.t('Free', '剩余'), L.t('Connection', '连接方式'), L.t('State', '状态')])
         hh = self.table.horizontalHeader(); hh.setSectionResizeMode(QHeaderView.Stretch); hh.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         for i in (3, 4): hh.setSectionResizeMode(i, QHeaderView.ResizeToContents)
         hh.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -1016,15 +1006,15 @@ class PhonesPage(QWidget):
         self.note.setTextFormat(Qt.RichText); self.note.linkActivated.connect(lambda _: win.phone_guide())
         self.warn = label('', wrap=True); self.warn.setStyleSheet(f'color: {BUILD}; font-size: 13px'); self.warn.hide(); lay.addWidget(self.warn)   # the picked phone's low battery
         row = QHBoxLayout(); self.adb_buttons = []
-        b = QPushButton('How to connect a phone…'); b.clicked.connect(win.phone_guide); row.addWidget(b)
-        for text, fn in (('Pair over Wi-Fi…', self.pair), ('Connect…', self.connect), ('Discover', self.discover), ('Disconnect', self.disconnect), ('Use over Wi-Fi…', self.tcpip)):
+        b = QPushButton(L.t('How to connect a phone…', '怎么连手机…')); b.clicked.connect(win.phone_guide); row.addWidget(b)
+        for text, fn in ((L.t('Pair over Wi-Fi…', 'Wi-Fi 配对…'), self.pair), (L.t('Connect…', '连接…'), self.connect), (L.t('Discover', '搜索'), self.discover), (L.t('Disconnect', '断开'), self.disconnect), (L.t('Use over Wi-Fi…', '改用 Wi-Fi…'), self.tcpip)):
             b = QPushButton(text); b.clicked.connect(fn); row.addWidget(b); self.adb_buttons.append(b)
         row.addStretch(); lay.addLayout(row)
-        lay.addSpacing(10); self.ph = label('The picked phone', 'h2'); lay.addWidget(self.ph); self.app = label('—', 'meta', wrap=True); lay.addWidget(self.app)
+        lay.addSpacing(10); self.ph = label(L.t('The picked phone', '已选中的手机'), 'h2'); lay.addWidget(self.ph); self.app = label('—', 'meta', wrap=True); lay.addWidget(self.app)
         self.games = QListWidget(); lay.addWidget(self.games, 1)
         row = QHBoxLayout()
-        for text, fn, name in (('Update the app', self.update_app, None), ('Back up saves to this computer', self.backup, None), ('Restore a backup…', self.restore_all, None),
-                               ('Move the old one-game install…', self.migrate, 'ghost')):
+        for text, fn, name in ((L.t('Update the app', '更新应用'), self.update_app, None), (L.t('Back up saves to this computer', '把存档备份到这台电脑'), self.backup, None), (L.t('Restore a backup…', '恢复备份…'), self.restore_all, None),
+                               (L.t('Move the old one-game install…', '迁移旧版单游戏安装…'), self.migrate, 'ghost')):
             b = QPushButton(text); b.clicked.connect(fn); row.addWidget(b)
             if name: b.setObjectName(name)
         row.addStretch(); lay.addLayout(row)
@@ -1047,69 +1037,68 @@ class PhonesPage(QWidget):
         r = self.table.currentRow()
         if r >= 0 and self.table.item(r, 0): self.win.set_serial(self.table.item(r, 0).data(Qt.UserRole))
     def show_phone(self, pkg, games, legacy):
-        self.ph.setText(self.win.phone_name() or 'No phone'); self.games.clear()
+        self.ph.setText(self.win.phone_name() or L.t('No phone', '没有手机')); self.games.clear()
         m = {k: v.strip() for k, v in re.findall(r'(versionName|lastUpdateTime)=(.+)', pkg)}   # dumpsys package's lines
-        self.app.setText(f'The DroidPlay app {m.get("versionName", "")} · updated {m["lastUpdateTime"][:16]}' if 'lastUpdateTime' in m else
-                         'The DroidPlay app is not installed' if self.win.serial() else 'The app and the games on the picked phone show here.')
+        self.app.setText(L.t(f'The DroidPlay app {m.get("versionName", "")} · updated {m["lastUpdateTime"][:16]}', f'DroidPlay 应用 {m.get("versionName", "")} · 更新于 {m["lastUpdateTime"][:16]}') if 'lastUpdateTime' in m else
+                         L.t('The DroidPlay app is not installed', 'DroidPlay 应用还没安装') if self.win.serial() else L.t('The app and the games on the picked phone show here.', '已选中手机上的应用和游戏会显示在这里。'))
         for gid, meta in games.items():
             it = QListWidgetItem(f'{meta.get("name") or gid}     {gid} · {meta.get("display") or meta.get("version") or "?"}'); it.setData(Qt.UserRole, gid); self.games.addItem(it)
-        if legacy: self.games.addItem('A one-game install (files/game, before the launcher): Move the old one-game install puts it in the launcher, its save copied over')
+        if legacy: self.games.addItem(L.t('A one-game install (files/game, before the launcher): Move the old one-game install puts it in the launcher, its save copied over', '旧版单游戏安装（files/game，启动器之前）：用「迁移旧版单游戏安装」把它放进启动器，存档会一并复制过去'))
     def pair(self): PairDialog(self.win).exec()
     def connect(self):
-        addr, ok = QInputDialog.getText(self, 'Connect', 'Address and port from the Wireless debugging screen (e.g. 192.168.1.125:39973):', text=self.win.st.value('wifi', ''))
+        addr, ok = QInputDialog.getText(self, L.t('Connect', '连接'), L.t('Address and port from the Wireless debugging screen (e.g. 192.168.1.125:39973):', '「无线调试」页面上的地址和端口（例如 192.168.1.125:39973）：'), text=self.win.st.value('wifi', ''))
         if not ok or not addr: return
         self.win.st.setValue('wifi', addr.strip())
         def got(r):   # adb's words in plain ones: it exits 0 from a failed connect too
             ok2, text = wifi.connect_result(*r) if not isinstance(r, Exception) else (False, str(r))
-            self.win.toast(f'Connected to {addr.strip()}' if ok2 else re.sub(r'<[^>]+>', '', text)); self.win.refresh_devices()
+            self.win.toast(L.t(f'Connected to {addr.strip()}', f'已连接到 {addr.strip()}') if ok2 else re.sub(r'<[^>]+>', '', text)); self.win.refresh_devices()
         bg(lambda: adb_run(None, 'connect', addr.strip(), timeout=30), got)
     def discover(self):   # every phone offering a connection on the network, to connect to: it offered the first one only
         names = {i: self.win.models.get(s) for s, i in self.win.ids.items() if self.win.models.get(s)}
         def got(r):
             found = wifi.discovered(r[0], r[1], names) if not isinstance(r, Exception) else []
-            if not found: QMessageBox.information(self, 'Discover', 'No phone offers wireless debugging on this network. Pair it first (Pair over Wi-Fi…), keep its '
-                                                  'Wireless debugging screen on, and check that ' + wifi.SAME_NETWORK + '.'); return
-            d = QDialog(self); d.setWindowTitle('Discover'); d.setStyleSheet(STYLE + f'QDialog {{ background: {PANEL}; }}'); d.setMinimumWidth(480)
-            lay = QVBoxLayout(d); lay.setContentsMargins(24, 20, 24, 18); lay.addWidget(label('Phones offering wireless debugging on this network', 'h2'))
+            if not found: QMessageBox.information(self, L.t('Discover', '搜索'), L.t(f'No phone offers wireless debugging on this network. Pair it first (Pair over Wi-Fi…), keep its Wireless debugging screen on, and check that {wifi.SAME_NETWORK}.',
+                                                                              f'这个网络里没有手机提供无线调试。先用「Wi-Fi 配对…」配对，让它的无线调试页面一直开着，并确认 {wifi.SAME_NETWORK}。')); return
+            d = QDialog(self); d.setWindowTitle(L.t('Discover', '搜索')); d.setStyleSheet(STYLE + f'QDialog {{ background: {PANEL}; }}'); d.setMinimumWidth(480)
+            lay = QVBoxLayout(d); lay.setContentsMargins(24, 20, 24, 18); lay.addWidget(label(L.t('Phones offering wireless debugging on this network', '这个网络里开着无线调试的手机'), 'h2'))
             lst = QListWidget()
             for text, addr, on in found:
                 it = QListWidgetItem(text + (' · connected' if on else '')); it.setData(Qt.UserRole, addr)
                 it.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled if not on else Qt.NoItemFlags); it.setCheckState(Qt.Unchecked if on else Qt.Checked); lst.addItem(it)
-            lay.addWidget(lst); box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel); box.button(QDialogButtonBox.Ok).setText('Connect')
+            lay.addWidget(lst); box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel); box.button(QDialogButtonBox.Ok).setText(L.t('Connect', '连接'))
             box.accepted.connect(d.accept); box.rejected.connect(d.reject); lay.addWidget(box)
             if d.exec() != QDialog.Accepted: return
             want = [lst.item(i).data(Qt.UserRole) for i in range(lst.count()) if lst.item(i).checkState() == Qt.Checked]
             def connect_all(): return [(a, *wifi.connect_result(*adb_run(None, 'connect', a, timeout=20))) for a in want]
             def done(rs):
                 bad = [f'{a}: {re.sub(r"<[^>]+>", "", t)}' for a, ok, t in rs if not ok] if not isinstance(rs, Exception) else [str(rs)]
-                self.win.toast(f'Connected to {len(want) - len(bad)} of {len(want)}' + (f'. {bad[0]}' if bad else '')); self.win.refresh_devices()
+                self.win.toast(L.t(f'Connected to {len(want) - len(bad)} of {len(want)}', f'已连接 {len(want) - len(bad)} / {len(want)}') + (f'. {bad[0]}' if bad else '')); self.win.refresh_devices()
             if want: bg(connect_all, done)
         bg(lambda: (adb_run(None, 'mdns', 'services', timeout=8)[1], adb_run(None, 'devices', timeout=10)[1]), got)
     def disconnect(self):   # the row picked here, else the phone picked at the top: a phone on USB and Wi-Fi has one entry at the top, its USB one
         r = self.table.currentRow(); s = self.table.item(r, 0).data(Qt.UserRole) if r >= 0 and self.table.item(r, 0) else self.win.serial()
         if not s: return
         how, s = wifi.disconnect_plan(s); name = self.win.models.get(s) or s
-        if how == 'usb': self.win.toast(f'{name} is connected by its cable: unplug it to disconnect it'); return
+        if how == 'usb': self.win.toast(L.t(f'{name} is connected by its cable: unplug it to disconnect it', f'{name} 是用数据线连的：拔掉线才能断开它')); return
         self.win.let_go.update(dict.fromkeys({self.win.phone_key(s), s}, 'leaving'))   # dropped on purpose: not connected again behind the player's back (track_lost)
         if self.win.lost and self.win.lost['id'] == self.win.phone_key(s): self.win.lost = None
-        if how == 'wireless off':
-            if QMessageBox.question(self, 'Disconnect', f'Turn off Wireless debugging on {name}? adb connected it by itself over the network and would connect it again '
-                                    'while Wireless debugging is on. Turn it on again on the phone to reconnect.') != QMessageBox.Yes: return
+        if how == L.t('wireless off', '无线调试已关'):
+            if QMessageBox.question(self, L.t('Disconnect', '断开'), L.t(f'Turn off Wireless debugging on {name}? adb connected it by itself over the network and would connect it again while Wireless debugging is on. Turn it on again on the phone to reconnect.', f'关掉 {name} 上的无线调试？adb 是自己在网络上连上它的，只要无线调试开着它就会再连一次。要重连请在手机上重新打开。')) != QMessageBox.Yes: return
             bg(lambda: adb_run(s, 'shell', 'settings put global adb_wifi_enabled 0', timeout=15),
-               lambda _: (self.win.toast(f'Wireless debugging is off on {name}: turn it on again on the phone to reconnect'), self.win.refresh_devices())); return
-        bg(lambda: adb_run(None, 'disconnect', s, timeout=15), lambda r: (self.win.toast(f'Disconnected {name}' if not isinstance(r, Exception) and r[0] else f'Could not disconnect {name}: {r[1] if not isinstance(r, Exception) else r}'),
+               lambda _: (self.win.toast(L.t(f'Wireless debugging is off on {name}: turn it on again on the phone to reconnect', f'{name} 上的无线调试关掉了：要在手机上重新打开才能连回来')), self.win.refresh_devices())); return
+        bg(lambda: adb_run(None, 'disconnect', s, timeout=15), lambda r: (self.win.toast(L.t(f'Disconnected {name}', f'已断开 {name}') if not isinstance(r, Exception) and r[0] else L.t(f'Could not disconnect {name}: {r[1] if not isinstance(r, Exception) else r}', f'没能断开 {name}：{r[1] if not isinstance(r, Exception) else r}')),
                                                                            self.win.refresh_devices()))
     def tcpip(self):   # a phone on its cable, over Wi-Fi with no pairing (adb tcpip): Android 10 has no Wireless debugging, and a phone allowed over USB needs no pairing
         r = self.table.currentRow(); s = self.table.item(r, 0).data(Qt.UserRole) if r >= 0 and self.table.item(r, 0) else self.win.serial()
         name = self.win.models.get(s) or s
-        if not s or phone_id.wifi(s): self.win.toast('Pick a phone connected by its cable: Use over Wi-Fi starts from there'); return
-        box = QMessageBox(QMessageBox.Question, 'Use over Wi-Fi', f'<b>Use {esc(name)} over Wi-Fi?</b>', parent=self); box.setInformativeText(wifi.TCPIP_WARNING)
+        if not s or phone_id.wifi(s): self.win.toast(L.t('Pick a phone connected by its cable: Use over Wi-Fi starts from there', '请选一台用数据线连着的手机：「改用 Wi-Fi」从它开始')); return
+        box = QMessageBox(QMessageBox.Question, L.t('Use over Wi-Fi', '改用 Wi-Fi'), L.t(f'<b>Use {esc(name)} over Wi-Fi?</b>', f'<b>把 {esc(name)} 改用 Wi-Fi？</b>'), parent=self); box.setInformativeText(wifi.TCPIP_WARNING)
         box.setStyleSheet('QLabel#qt_msgbox_informativelabel { min-width: 460px; }')
-        go = box.addButton('Use over Wi-Fi', QMessageBox.AcceptRole); box.addButton(QMessageBox.Cancel); box.setDefaultButton(go); box.exec()
+        go = box.addButton(L.t('Use over Wi-Fi', '改用 Wi-Fi'), QMessageBox.AcceptRole); box.addButton(QMessageBox.Cancel); box.setDefaultButton(go); box.exec()
         if box.clickedButton() is not go: return
         def run():   # its Wi-Fi address first: adb on the phone is out of reach over USB for a moment once it restarts
             ip = wifi.wifi_ip(adb_run(s, 'shell', wifi.IP_CMD, timeout=10)[1])
-            if not ip: return False, f'{name} is not on Wi-Fi: connect it to the same network as this PC, then try again'
+            if not ip: return False, L.t(f'{name} is not on Wi-Fi: connect it to the same network as this PC, then try again', f'{name} 不在 Wi-Fi 上：把它连到和这台电脑同一个网络，再试一次')
             ok, text = wifi.tcpip_result(*adb_run(s, 'tcpip', str(wifi.TCPIP_PORT), timeout=20))
             if not ok: return False, text
             addr = f'{ip}:{wifi.TCPIP_PORT}'
@@ -1120,65 +1109,63 @@ class PhonesPage(QWidget):
         def got(r):
             ok, text = r if not isinstance(r, Exception) else (False, str(r))
             if ok: self.win.st.setValue('wifi', text)
-            self.win.toast(f'{name} is connected over Wi-Fi at {text} (not encrypted): you can unplug its cable' if ok else re.sub(r'<[^>]+>', '', text)); self.win.refresh_devices()
-        self.win.toast(f'Connecting to {name} over Wi-Fi…'); bg(run, got)
+            self.win.toast(L.t(f'{name} is connected over Wi-Fi at {text} (not encrypted): you can unplug its cable', f'{name} 已通过 Wi-Fi 连接，地址 {text}（未加密）：可以把数据线拔掉了') if ok else re.sub(r'<[^>]+>', '', text)); self.win.refresh_devices()
+        self.win.toast(L.t(f'Connecting to {name} over Wi-Fi…', f'正在通过 Wi-Fi 连接 {name}…')); bg(run, got)
     def update_app(self):
         s = self.win.serial()
-        if s: self.win.builds.start('Update the app', ['--apk-only', '--serial', s], after=self.win.refresh_phone)
+        if s: self.win.builds.start(L.t('Update the app', '更新应用'), ['--apk-only', '--serial', s], after=self.win.refresh_phone)
     def migrate(self):
         s = self.win.serial()
         if not s: return
         lib = ba.library()
         items = [f'{m.get("name") or gid} ({gid})' for gid, (_, m) in lib.items()]
-        if not items: QMessageBox.information(self, 'Move', 'Build the game first, so the app gets its host'); return
-        pick, ok = QInputDialog.getItem(self, 'Move the old one-game install', 'The game it holds (its save is copied to that game; the old save stays as it was):', items, 0, False)
+        if not items: QMessageBox.information(self, L.t('Move', '迁移'), L.t('Build the game first, so the app gets its host', '请先构建这个游戏，应用才有它的 host')); return
+        pick, ok = QInputDialog.getItem(self, L.t('Move the old one-game install', '迁移旧版单游戏安装'), L.t('The game it holds (its save is copied to that game; the old save stays as it was):', '它装的是哪个游戏（存档会复制给这个游戏；旧存档保持原样）：'), items, 0, False)
         if not ok: return
         gid = pick.rsplit('(', 1)[-1].rstrip(')')
-        if QMessageBox.question(self, 'Move', 'First the save backups on the phone are copied to this computer, then the game folder moves and the app is updated; '
-                                'the app copies the save when it next opens. Go on?') != QMessageBox.Yes: return
-        self.backup(then=lambda: self.win.builds.start('Move the old install', ['--migrate', '--title', gid, '--serial', s],
-                                                       after=lambda: self.win.builds.start('Update the app', ['--apk-only', '--serial', s], after=self.win.refresh_phone)))
+        if QMessageBox.question(self, L.t('Move', '迁移'), L.t('First the save backups on the phone are copied to this computer, then the game folder moves and the app is updated; the app copies the save when it next opens. Go on?', '先把手机上的存档备份复制到这台电脑，然后移动游戏文件夹并更新应用；应用下次打开时会把存档复制过去。继续？')) != QMessageBox.Yes: return
+        self.backup(then=lambda: self.win.builds.start(L.t('Move the old install', '迁移旧安装'), ['--migrate', '--title', gid, '--serial', s],
+                                                       after=lambda: self.win.builds.start(L.t('Update the app', '更新应用'), ['--apk-only', '--serial', s], after=self.win.refresh_phone)))
     def backup(self, then=None):
         s = self.win.serial()
         if not s: return
         dst = ba.data_dir() / 'backups' / phone_id.safe(self.win.phone_key(s)) / time.strftime('%Y%m%d-%H%M%S')   # one folder a phone, whatever its Wi-Fi port
         def run():
             ok, out = adb_run(s, 'shell', f'ls {REMOTE}/backups')
-            if not ok or not out.strip(): return None, 'no backups on the phone yet: open the app and use Back up saves in its game list'
+            if not ok or not out.strip(): return None, L.t('no backups on the phone yet: open the app and use Back up saves in its game list', '手机上还没有备份：打开应用，在它的游戏列表里用「备份存档」')
             dst.mkdir(parents=True, exist_ok=True)
             return adb_run(s, 'pull', f'{REMOTE}/backups', str(dst), timeout=600)
         def got(r):
-            if isinstance(r, Exception): QMessageBox.warning(self, 'Backup', str(r)); return
+            if isinstance(r, Exception): QMessageBox.warning(self, L.t('Backup', '备份'), str(r)); return
             ok, out = r
-            if ok: self.win.toast(f'The phone\'s save backups are in {dst}')
-            elif not then: QMessageBox.warning(self, 'Backup', out)
+            if ok: self.win.toast(L.t(f'The phone\'s save backups are in {dst}', f'手机上的存档备份在 {dst}'))
+            elif not then: QMessageBox.warning(self, L.t('Backup', '备份'), out)
             if then and ok: then()
-            elif then and QMessageBox.question(self, 'Backup', f'No backup was copied ({out}). Go on anyway? The old save stays on the phone either way.') == QMessageBox.Yes: then()
+            elif then and QMessageBox.question(self, L.t('Backup', '备份'), L.t(f'No backup was copied ({out}). Go on anyway? The old save stays on the phone either way.', f'没有复制到备份（{out}）。还是要继续吗？旧存档无论如何都还留在手机上。')) == QMessageBox.Yes: then()
         bg(run, got)
     # A save sent to the phone's files/import/<title ID>/ (build_android_from_nsp.py --import-save / --restore-backup): DroidPlay on the phone shows what it found and asks,
     # keeps the save it has in its files/backups/, then swaps the new one in (dm/android/java LauncherSaves.incoming)
     def import_save(self, gid, name):
         s = self.win.serial()
         if not s: return
-        b = QMessageBox(QMessageBox.Question, 'Import a save', f'A save for {name} on {self.win.phone_name()}: a save folder (an emulator\'s, a JKSV, EdiZon or Checkpoint backup, '
-                        'a PC port\'s), or a zip of one.\n\nDroidPlay on the phone shows the save it found and asks before swapping it in, and keeps the save it has first.',
+        b = QMessageBox(QMessageBox.Question, L.t('Import a save', '导入存档'), L.t(f"A save for {name} on {self.win.phone_name()}: a save folder (an emulator\'s, a JKSV, EdiZon or Checkpoint backup, a PC port\'s), or a zip of one.\n\nDroidPlay on the phone shows the save it found and asks before swapping it in, and keeps the save it has first.", f"给 {self.win.phone_name()} 上 {name} 的存档：一个存档文件夹（模拟器的、JKSV、EdiZon 或 Checkpoint 的备份、PC 移植版的），或者它的压缩包。\n\n手机上的 DroidPlay 会显示找到的存档，换进去之前会先问，并且会先保留它现有的存档。"),
                         QMessageBox.Cancel, self)
-        folder = b.addButton('A folder…', QMessageBox.AcceptRole); archive = b.addButton('A zip or other archive…', QMessageBox.AcceptRole); b.exec()
-        if b.clickedButton() is folder: path = QFileDialog.getExistingDirectory(self, f'The save folder for {name}', str(Path.home()))
-        elif b.clickedButton() is archive: path = QFileDialog.getOpenFileName(self, f'A save archive for {name}', str(Path.home()), 'Archives (*.zip *.rar *.7z *.tar *.tgz *.gz);;All files (*)')[0]
+        folder = b.addButton(L.t('A folder…', '文件夹…'), QMessageBox.AcceptRole); archive = b.addButton(L.t('A zip or other archive…', '压缩包或其他归档…'), QMessageBox.AcceptRole); b.exec()
+        if b.clickedButton() is folder: path = QFileDialog.getExistingDirectory(self, L.t(f'The save folder for {name}', f'{name} 的存档文件夹'), str(Path.home()))
+        elif b.clickedButton() is archive: path = QFileDialog.getOpenFileName(self, L.t(f'A save archive for {name}', f'{name} 的存档压缩包'), str(Path.home()), L.t('Archives (*.zip *.rar *.7z *.tar *.tgz *.gz);;All files (*)', '归档 (*.zip *.rar *.7z *.tar *.tgz *.gz);;所有文件 (*)'))[0]
         else: return
-        if path: self.win.builds.start(f'Import a save for {name}', ['--import-save', path, '--title', gid, '--serial', s], after=self.win.refresh_phone)
+        if path: self.win.builds.start(L.t(f'Import a save for {name}', f'导入 {name} 的存档'), ['--import-save', path, '--title', gid, '--serial', s], after=self.win.refresh_phone)
     def restore_all(self): self.restore_backup()   # a button's clicked(checked) would pass its bool as gid
     def restore_backup(self, gid=None, name=None):   # one game's save from a backup Back up saves pulled, or every game's in it
         s = self.win.serial()
         if not s: return
         mine = ba.data_dir() / 'backups' / phone_id.safe(self.win.phone_key(s))   # where backup() puts this phone's
         start = mine if mine.is_dir() else ba.data_dir() / 'backups'
-        path = QFileDialog.getExistingDirectory(self, f'A backup holding {name}\'s save' if name else 'A save backup to put back (every game in it)', str(start if start.is_dir() else Path.home()))
-        if path: self.win.builds.start('Restore a save backup', ['--restore-backup', path, *(['--title', gid] if gid else []), '--serial', s], after=self.win.refresh_phone)
+        path = QFileDialog.getExistingDirectory(self, L.t(f'A backup holding {name}\'s save', f'含 {name} 存档的备份') if name else L.t('A save backup to put back (every game in it)', '要恢复的存档备份（含其中每个游戏）'), str(start if start.is_dir() else Path.home()))
+        if path: self.win.builds.start(L.t('Restore a save backup', '恢复存档备份'), ['--restore-backup', path, *(['--title', gid] if gid else []), '--serial', s], after=self.win.refresh_phone)
     def remove_game(self, gid, name):
         s = self.win.serial()
-        if not s or QMessageBox.question(self, 'Remove', f'Delete {name} from {self.win.phone_name()}? Its save stays in the app.') != QMessageBox.Yes: return
+        if not s or QMessageBox.question(self, L.t('Remove', '移除'), L.t(f'Delete {name} from {self.win.phone_name()}? Its save stays in the app.', f'从 {self.win.phone_name()} 删除 {name}？它的存档还留在应用里。')) != QMessageBox.Yes: return
         bg(lambda: adb_run(s, 'shell', 'rm', '-rf', f'{REMOTE}/games/{gid}'), lambda _: self.win.refresh_phone())
 
 
@@ -1195,7 +1182,7 @@ class Chart(QWidget):   # frame time history (ms), with the 16.7 and 33.3 ms lin
         if len(self.vals) > 1:
             p.setPen(QPen(QColor(TEXT), 2)); step = (w - 24) / (len(self.vals) - 1)
             for i in range(1, len(self.vals)): p.drawLine(int(12 + (i - 1) * step), int(h - self.vals[i - 1] / top * h), int(12 + i * step), int(h - self.vals[i] / top * h))
-        else: p.setPen(QColor(TEXT3)); p.drawText(self.rect(), Qt.AlignCenter, 'Watch the log while a game runs: its frame time shows here every ~10 s')
+        else: p.setPen(QColor(TEXT3)); p.drawText(self.rect(), Qt.AlignCenter, L.t('Watch the log while a game runs: its frame time shows here every ~10 s', '运行游戏时监视日志：帧时间大约每 10 秒显示在这里'))
 
 
 class PerformancePage(QWidget):
@@ -1206,33 +1193,33 @@ class PerformancePage(QWidget):
     def __init__(self, win):
         super().__init__(); self.win = win; self.setObjectName('page'); self.proc = None; self.buf = ''; self.passes = []
         lay = QVBoxLayout(self); lay.setContentsMargins(48, 32, 48, 24); lay.setSpacing(16)
-        head = QHBoxLayout(); head.addWidget(label('Performance', 'h1')); head.addStretch()
-        self.b_run = QPushButton('Watch the log'); self.b_run.clicked.connect(self.toggle); head.addWidget(self.b_run)
-        for text, fn in (('Profile a frame', self.profile), ('Thermal', self.thermal), ('Open the app', self.launch), ('Stop the app', self.stop_app), ('Save log.txt…', self.save)):
+        head = QHBoxLayout(); head.addWidget(label(L.t('Performance', '性能'), 'h1')); head.addStretch()
+        self.b_run = QPushButton(L.t('Watch the log', '监视日志')); self.b_run.clicked.connect(self.toggle); head.addWidget(self.b_run)
+        for text, fn in ((L.t('Profile a frame', '剖析一帧'), self.profile), (L.t('Thermal', '温度'), self.thermal), (L.t('Open the app', '打开应用'), self.launch), (L.t('Stop the app', '关掉应用'), self.stop_app), (L.t('Save log.txt…', '保存 log.txt…'), self.save)):
             b = QPushButton(text); b.setObjectName('ghost'); b.clicked.connect(fn); head.addWidget(b)
         lay.addLayout(head)
         tiles = QGridLayout(); tiles.setSpacing(12); self.tiles = {}
-        for i, (k, t) in enumerate((('fps', 'FRAMES PER SECOND'), ('frame', 'FRAME TIME P50 / P95'), ('gpu', 'GPU BUSY PER FRAME'), ('cpu', 'REPLAY CPU PER FRAME'),
-                                    ('speed', 'GAME SPEED'), ('wait', 'WAIT FOR THE GPU'))):
+        for i, (k, t) in enumerate((('fps', L.t('FRAMES PER SECOND', '每秒帧数')), ('frame', L.t('FRAME TIME P50 / P95', '帧时间 P50 / P95')), ('gpu', L.t('GPU BUSY PER FRAME', '每帧 GPU 占用')), ('cpu', L.t('REPLAY CPU PER FRAME', '每帧 REPLAY CPU')),
+                                    ('speed', L.t('GAME SPEED', '游戏速度')), ('wait', L.t('WAIT FOR THE GPU', '等待 GPU')))):
             f = QFrame(); f.setObjectName('tile'); fl = QVBoxLayout(f); fl.setContentsMargins(16, 14, 16, 14)
             v = label('—', 'tilevalue'); fl.addWidget(label(t, 'tilelabel')); fl.addWidget(v); self.tiles[k] = v; tiles.addWidget(f, 0, i)
         lay.addLayout(tiles); self.chart = Chart(); lay.addWidget(self.chart)
         split = QSplitter(Qt.Horizontal)
         left = QWidget(); ll = QVBoxLayout(left); ll.setContentsMargins(0, 0, 0, 0)
-        self.filter = QLineEdit(); self.filter.setPlaceholderText('Filter the log (e.g. RED)'); ll.addWidget(self.filter)
+        self.filter = QLineEdit(); self.filter.setPlaceholderText(L.t('Filter the log (e.g. RED)', '过滤日志（例如 RED）')); ll.addWidget(self.filter)
         self.log = QPlainTextEdit(); self.log.setObjectName('log'); self.log.setReadOnly(True); self.log.setMaximumBlockCount(5000); ll.addWidget(self.log)
         split.addWidget(left)
-        self.prof = QTableWidget(0, 3); self.prof.setHorizontalHeaderLabels(['GPU passes of a frame', 'ms', 'share']); self.prof.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.prof = QTableWidget(0, 3); self.prof.setHorizontalHeaderLabels([L.t('GPU passes of a frame', '一帧的 GPU 通道'), L.t('ms', '毫秒'), L.t('share', '占比')]); self.prof.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.prof.verticalHeader().hide(); self.prof.setShowGrid(False); split.addWidget(self.prof); split.setSizes([700, 380])
         lay.addWidget(split, 1)
     def toggle(self):
-        if self.proc and self.proc.state() != QProcess.NotRunning: self.wanted = False; self.proc.kill(); self.b_run.setText('Watch the log'); return
+        if self.proc and self.proc.state() != QProcess.NotRunning: self.wanted = False; self.proc.kill(); self.b_run.setText(L.t('Watch the log', '监视日志')); return
         s = self.win.serial()
         if not s: self.win.toast(self.win.no_phone()); return
         self.proc = QProcess(self); self.proc.setProgram('adb'); self.proc.setArguments(['-s', s, 'logcat', '-T', '200', '-s', 'DroidPlay', 'nxnative'])   # the app's tag; nxnative from an app older than 0.5.0
-        self.proc.readyReadStandardOutput.connect(self.read); self.proc.finished.connect(self.ended); self.proc.start(); self.b_run.setText('Stop watching'); self.wanted = True
+        self.proc.readyReadStandardOutput.connect(self.read); self.proc.finished.connect(self.ended); self.proc.start(); self.b_run.setText(L.t('Stop watching', '停止监视')); self.wanted = True
     def ended(self, *_):   # logcat ended without Stop watching: the phone dropped off (Wi-Fi). resume() starts it again when the phone is back
-        if getattr(self, 'wanted', False): self.b_run.setText('Watch the log'); self.log.appendHtml(f'<span style="color:{BUILD}">— the phone dropped off: the log goes on when it is back</span>')
+        if getattr(self, 'wanted', False): self.b_run.setText(L.t('Watch the log', '监视日志')); self.log.appendHtml(L.t(f'<span style="color:{BUILD}">— the phone dropped off: the log goes on when it is back</span>', f'<span style="color:{BUILD}">— 手机断开了：它回来以后日志会继续</span>'))
     def resume(self):
         if getattr(self, 'wanted', False) and not (self.proc and self.proc.state() != QProcess.NotRunning) and self.win.serial(): self.toggle()
     def read(self):
@@ -1256,22 +1243,22 @@ class PerformancePage(QWidget):
         if not self.passes: return
         groups = {}
         for us, w, h, draws in self.passes:
-            k = 'Without draws (clears)' if draws == 0 else 'Full size (720p / 1080p)' if w >= 1280 else 'Small (bloom, blur, shadows)' if w < 400 else '3D scene and the rest'
+            k = L.t('Without draws (clears)', '没有绘制（只清屏）') if draws == 0 else L.t('Full size (720p / 1080p)', '全尺寸（720p / 1080p）') if w >= 1280 else L.t('Small (bloom, blur, shadows)', '小尺寸（泛光、模糊、阴影）') if w < 400 else L.t('3D scene and the rest', '3D 场景和其他')
             groups[k] = groups.get(k, 0) + us
         total = sum(groups.values()) or 1; self.prof.setRowCount(len(groups) + 1)
         for i, (k, us) in enumerate(sorted(groups.items(), key=lambda x: -x[1])):
             for j, v in enumerate((k, f'{us / 1000:.1f}', f'{100 * us / total:.0f}%')): self.prof.setItem(i, j, QTableWidgetItem(v))
-        for j, v in enumerate((f'{len(self.passes)} passes', f'{total / 1000:.1f}', '')): self.prof.setItem(len(groups), j, QTableWidgetItem(v))
+        for j, v in enumerate((L.t(f'{len(self.passes)} passes', f'{len(self.passes)} 个通道'), f'{total / 1000:.1f}', '')): self.prof.setItem(len(groups), j, QTableWidgetItem(v))
         self.passes = []
     def profile(self):
         s = self.win.serial()
         if not s: return
         if not (self.proc and self.proc.state() != QProcess.NotRunning): self.toggle()
-        self.passes = []; bg(lambda: adb_run(s, 'shell', f'touch {REMOTE}/prof_now'), lambda r: self.win.toast('A frame is profiled within ~1 s while a game runs'))
+        self.passes = []; bg(lambda: adb_run(s, 'shell', f'touch {REMOTE}/prof_now'), lambda r: self.win.toast(L.t('A frame is profiled within ~1 s while a game runs', '游戏运行时，约 1 秒内会剖析一帧')))
     def thermal(self):
         s = self.win.serial()
         if s: bg(lambda: adb_run(s, 'shell', 'dumpsys thermalservice | grep -E "Thermal Status|cpufreq|devfreq|Temperature\\{" | head -20; dumpsys battery | grep -E "temperature|powered"'),
-                 lambda r: QMessageBox.information(self, 'Thermal', (r[1] if not isinstance(r, Exception) else str(r)) + '\n\nA cpufreq value above 0: the phone limits those cores because of heat.'))
+                 lambda r: QMessageBox.information(self, L.t('Thermal', '温度'), (r[1] if not isinstance(r, Exception) else str(r)) + L.t('\n\nA cpufreq value above 0: the phone limits those cores because of heat.', '\\n\\ncpufreq 大于 0 说明手机因为温度限制了那几个核心。')))
     def launch(self):
         s = self.win.serial()
         if s: bg(lambda: adb_run(s, 'shell', 'am', 'start', '-n', f'{PKG}/.Launcher'), lambda _: None)
@@ -1281,7 +1268,7 @@ class PerformancePage(QWidget):
     def save(self):
         s = self.win.serial()
         if not s: return
-        f, _ = QFileDialog.getSaveFileName(self, 'Save the app log', 'log.txt', 'Text (*.txt)')
+        f, _ = QFileDialog.getSaveFileName(self, L.t('Save the app log', '保存应用日志'), 'log.txt', L.t('Text (*.txt)', '文本 (*.txt)'))
         if f: bg(lambda: adb_run(s, 'pull', f'{REMOTE}/log.txt', f, timeout=60), lambda r: self.win.toast(r[1] if not isinstance(r, Exception) else str(r)))
 
 
@@ -1293,22 +1280,22 @@ class SettingsPage(QWidget):
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); outer.addWidget(scroll)
         inner = QWidget(); inner.setObjectName('page'); scroll.setWidget(inner)   # a low window scrolls the page: the table is as tall as its rows, with no scroller of its own
         lay = QVBoxLayout(inner); lay.setContentsMargins(48, 32, 48, 24); lay.setSpacing(16)
-        lay.addWidget(label('Settings', 'h1'))
-        keys = QHBoxLayout(); keys.addWidget(label('Your prod.keys', 'meta')); self.keys = QLineEdit(win.st.value('keys', '')); self.keys.setPlaceholderText('the keys dumped from your Switch')
+        lay.addWidget(label(L.t('Settings', '设置'), 'h1'))
+        keys = QHBoxLayout(); keys.addWidget(label(L.t('Your prod.keys', '你的 prod.keys'), 'meta')); self.keys = QLineEdit(win.st.value('keys', '')); self.keys.setPlaceholderText(L.t('the keys dumped from your Switch', '从你的 Switch 里导出的密钥'))
         self.keys.editingFinished.connect(lambda: self.set_keys(self.keys.text().strip())); keys.addWidget(self.keys, 1)
-        b = QPushButton('Choose…'); b.clicked.connect(self.pick_keys); keys.addWidget(b); lay.addLayout(keys)
-        upd = QHBoxLayout(); upd.addWidget(label('Updates', 'meta')); self.update_line = label('', 'muted'); upd.addWidget(self.update_line, 1)
-        self.update_btn = QPushButton('Check for updates'); self.update_btn.setObjectName('ghost'); self.update_btn.clicked.connect(self.update_clicked); upd.addWidget(self.update_btn)
+        b = QPushButton(L.t('Choose…', '选择…')); b.clicked.connect(self.pick_keys); keys.addWidget(b); lay.addLayout(keys)
+        upd = QHBoxLayout(); upd.addWidget(label(L.t('Updates', '更新'), 'meta')); self.update_line = label('', 'muted'); upd.addWidget(self.update_line, 1)
+        self.update_btn = QPushButton(L.t('Check for updates', '检查更新')); self.update_btn.setObjectName('ghost'); self.update_btn.clicked.connect(self.update_clicked); upd.addWidget(self.update_btn)
         lay.addLayout(upd)
-        start = QHBoxLayout(); start.addWidget(label('Get started', 'meta')); self.start_line = label('', 'muted'); start.addWidget(self.start_line, 1)
-        b = QPushButton('Show the setup checklist'); b.setObjectName('ghost'); b.clicked.connect(lambda: win.go('setup')); start.addWidget(b); lay.addLayout(start)
+        start = QHBoxLayout(); start.addWidget(label(L.t('Get started', '开始使用'), 'meta')); self.start_line = label('', 'muted'); start.addWidget(self.start_line, 1)
+        b = QPushButton(L.t('Show the setup checklist', '显示设置清单')); b.setObjectName('ghost'); b.clicked.connect(lambda: win.go('setup')); start.addWidget(b); lay.addLayout(start)
         lay.addSpacing(8)
-        head = QHBoxLayout(); head.addWidget(label('Requirements', 'h2')); head.addStretch(); b = QPushButton('Check again'); b.setObjectName('ghost'); b.clicked.connect(lambda *_: self.run()); head.addWidget(b)
-        self.setup = QPushButton("Install what's missing"); self.setup.clicked.connect(self.install); self.setup.hide(); head.addWidget(self.setup); self.rows = []
+        head = QHBoxLayout(); head.addWidget(label(L.t('Requirements', '环境要求'), 'h2')); head.addStretch(); b = QPushButton(L.t('Check again', '重新检查')); b.setObjectName('ghost'); b.clicked.connect(lambda *_: self.run()); head.addWidget(b)
+        self.setup = QPushButton(L.t("Install what's missing", "安装缺少的东西")); self.setup.clicked.connect(self.install); self.setup.hide(); head.addWidget(self.setup); self.rows = []
         self.checked = False   # --check has answered once: until then the checklist says it is looking, not that tools are missing
         lay.addLayout(head)
-        self.summary = label('Checking what the build needs…', 'muted', wrap=True); lay.addWidget(self.summary)
-        self.table = QTableWidget(0, 3); self.table.setHorizontalHeaderLabels(['', 'What', 'Detail / how to get it']); self.table.verticalHeader().hide(); self.table.setShowGrid(False)
+        self.summary = label(L.t('Checking what the build needs…', '正在检查构建需要什么…'), 'muted', wrap=True); lay.addWidget(self.summary)
+        self.table = QTableWidget(0, 3); self.table.setHorizontalHeaderLabels(['', L.t('What', '项目'), L.t('Detail / how to get it', '详情 / 怎么获取')]); self.table.verticalHeader().hide(); self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch); self.table.setColumnWidth(0, 36); self.table.setColumnWidth(1, 220); self.table.setWordWrap(True)
         self.table.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter); self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.table.setSelectionMode(QTableWidget.NoSelection); self.table.setFocusPolicy(Qt.NoFocus)   # nothing to pick here, and a selected row lost its dot's colour
@@ -1316,11 +1303,11 @@ class SettingsPage(QWidget):
         lay.addWidget(self.table); lay.addStretch(1)
     def show_update(self, newer):   # the version, when DroidPlay last looked, and a newer release if there is one
         st, v = self.win.st, self.win.version; checked = st.value('update/checked', '')
-        when = f' Last checked {checked}.' if checked else ''
+        when = L.t(f' Last checked {checked}.', f' 上次检查：{checked}。') if checked else ''
         rel = self.win.release; can = bool(newer and rel and rel.get('setup') and upd.setup_install(REPO))
-        if newer: self.update_line.setText(f'DroidPlay {v} · {newer.lstrip("v")} is out.{when}'); self.update_btn.setText(f'{"Update to" if can else "Download"} {newer.lstrip("v")}')
-        elif upd.release_number(v): self.update_line.setText(f'DroidPlay {v}.{when}'); self.update_btn.setText('Check for updates')
-        else: self.update_line.setText(f'DroidPlay {v or "(its version unknown)"}: a copy from source, so it doesn\'t look for releases by itself.'); self.update_btn.setText('Check for updates')
+        if newer: self.update_line.setText(L.t(f'DroidPlay {v} · {newer.lstrip("v")} is out.{when}', f'DroidPlay {v} · {newer.lstrip("v")} 已发布。{when}')); self.update_btn.setText(f'{L.t("Update to", "更新到") if can else L.t("Download", "下载")} {newer.lstrip("v")}')
+        elif upd.release_number(v): self.update_line.setText(L.t(f'DroidPlay {v}.{when}', f'DroidPlay {v}。{when}')); self.update_btn.setText(L.t('Check for updates', '检查更新'))
+        else: self.update_line.setText(L.t(f'DroidPlay {v or L.t("(its version unknown)", "（版本未知）")}: a copy from source, so it doesn\'t look for releases by itself.', f'DroidPlay {v or L.t("(its version unknown)", "（版本未知）")}：这是从源码跑的拷贝，所以它自己不会去查新版本。')); self.update_btn.setText(L.t('Check for updates', '检查更新'))
         self.newer = newer
     def update_clicked(self):
         if getattr(self, 'newer', None) and self.win.release: self.win.update_now()   # Update, or the release's page where it can't
@@ -1331,7 +1318,7 @@ class SettingsPage(QWidget):
         t.setFixedHeight(t.horizontalHeader().height() + sum(t.rowHeight(i) for i in range(t.rowCount())) + 2 * t.frameWidth())
     def showEvent(self, e): super().showEvent(e); QTimer.singleShot(0, self.fit)
     def pick_keys(self):
-        f, _ = QFileDialog.getOpenFileName(self, 'Your prod.keys', '', 'Keys (*.keys);;All files (*)')
+        f, _ = QFileDialog.getOpenFileName(self, L.t('Your prod.keys', '你的 prod.keys'), '', L.t('Keys (*.keys);;All files (*)', '密钥 (*.keys);;所有文件 (*)'))
         if f: self.keys.setText(f); self.set_keys(f)
     def set_keys(self, f):   # the library reads NSP and XCI games with the keys: read it again when they change
         if f == (self.win.st.value('keys', '') or ''): return
@@ -1343,18 +1330,18 @@ class SettingsPage(QWidget):
             self.rows = rows; fixes = set(self.installable())
             # what is missing first; the Python modules, which come with the app, in one row while they are all there. The fix of what Install what's missing
             # gets is that button, above, rather than the console's --setup
-            missing = [dict(r, fix="Install what's missing gets it") if r['name'] in fixes else r for r in rows if not r['ok']]
+            missing = [dict(r, fix=L.t("Install what's missing gets it", "用「安装缺少的东西」装上它")) if r['name'] in fixes else r for r in rows if not r['ok']]
             found = [r for r in rows if r['ok'] and not r['name'].startswith('Python')]
             py = [r for r in rows if r['ok'] and r['name'].startswith('Python')]
-            if py: found.insert(0, {'name': 'Python modules', 'ok': True, 'detail': ', '.join(r['name'].split()[-1] for r in py), 'fix': '', 'tip': py[0]['detail']})
+            if py: found.insert(0, {'name': L.t('Python modules', 'Python 模块'), 'ok': True, 'detail': ', '.join(r['name'].split()[-1] for r in py), 'fix': '', 'tip': py[0]['detail']})
             shown = missing + found; self.table.setRowCount(len(shown))
             for i, r in enumerate(shown):
                 mark = QTableWidgetItem('●'); mark.setForeground(QColor(READY if r['ok'] else ERR)); mark.setTextAlignment(Qt.AlignCenter); self.table.setItem(i, 0, mark)
                 detail = QTableWidgetItem(r['detail'] + (f'\n→ {r["fix"]}' if r['fix'] else '')); detail.setToolTip(r.get('tip') or '')
                 self.table.setItem(i, 1, QTableWidgetItem(r['name'])); self.table.setItem(i, 2, detail)
             n, it = len(missing), 'it' if len(missing) == 1 else 'them'
-            self.summary.setText('Could not check what the build needs:' if failed else 'Everything the build needs is on this computer.' if not n else
-                                 f"{n} missing: Install what's missing gets {it}." if len(fixes) == n else f'{n} missing: the rows below say how to get {it}.')
+            self.summary.setText(L.t('Could not check what the build needs:', '没能检查构建需要什么：') if failed else L.t('Everything the build needs is on this computer.', '构建需要的东西这台电脑上都有。') if not n else
+                                 L.t(f"{n} missing: Install what's missing gets {it}.", f"{n} 项缺失：用「安装缺少的东西」获取{it}。") if len(fixes) == n else L.t(f'{n} missing: the rows below say how to get {it}.', f'{n} 项缺失：下表中写着怎么获取{it}。'))
             self.fit(); self.setup.setVisible(bool(fixes)); self.checked = True
             if then: then(rows)
             self.win.setup_changed()
@@ -1365,18 +1352,17 @@ class SettingsPage(QWidget):
         missing = self.installable()
         if not missing: return
         sdk_rows = set(ba.sdk_packages(Path('.'))) | {'Android SDK'}
-        parts = (['JDK 21, Microsoft\'s build (about 190 MB)'] if any(n.startswith('JDK') for n in missing) else []) + \
-                (['.NET SDK 10 (about 290 MB)'] if '.NET SDK 10' in missing else []) + \
-                (['the Android SDK: its command-line tools, platform-tools, platform, build-tools, NDK and CMake (about 1.1 GB to download, 4 GB installed)']
+        parts = ([L.t('JDK 21, Microsoft\'s build (about 190 MB)', 'JDK 21，微软的版本（约 190 MB）')] if any(n.startswith('JDK') for n in missing) else []) + \
+                ([L.t('.NET SDK 10 (about 290 MB)', '.NET SDK 10（约 290 MB）')] if '.NET SDK 10' in missing else []) + \
+                ([L.t('the Android SDK: its command-line tools, platform-tools, platform, build-tools, NDK and CMake (about 1.1 GB to download, 4 GB installed)', 'Android SDK：它的命令行工具、platform-tools、platform、build-tools、NDK 和 CMake（下载约 1.1 GB，装好约 4 GB）')]
                  if 'Android SDK' in missing else   # with no SDK found, --check lists none of its parts but adb
-                 [f'the Android SDK\'s {", ".join(n for n in missing if n in sdk_rows)}'] if any(n in sdk_rows for n in missing) else [])
+                 [L.t(f'the Android SDK\'s {", ".join(n for n in missing if n in sdk_rows)}', f'Android SDK 的 {", ".join(n for n in missing if n in sdk_rows)}')] if any(n in sdk_rows for n in missing) else [])
         sdk = any(n in sdk_rows for n in missing)
-        b = QMessageBox(QMessageBox.Question, "Install what's missing", 'Setup downloads and installs:\n\n• ' + '\n• '.join(parts) +
-                        f'\n\nThe JDK and the .NET SDK go into {ba.data_dir() / "tools"}, for this app alone; the Android SDK goes where Android Studio keeps it.', QMessageBox.Cancel, self)
-        if sdk: b.setInformativeText(f'The Android SDK comes from Google: installing its parts means accepting the <a style="color:{READY}" '
-                                     'href="https://developer.android.com/studio/terms">Android SDK License</a>. Nothing is sent to Google about you: '
-                                     'the SDK\'s usage metrics stay off.')
-        go = b.addButton('Accept and install' if sdk else 'Install', QMessageBox.AcceptRole); b.setDefaultButton(QMessageBox.Cancel); b.exec()
+        b = QMessageBox(QMessageBox.Question, L.t("Install what's missing", "安装缺少的东西"), L.t(f'Setup downloads and installs:\n\n• {"\n• ".join(parts)}\n\nThe JDK and the .NET SDK go into {ba.data_dir() / "tools"}, for this app alone; the Android SDK goes where Android Studio keeps it.',
+                                                                                  f'Setup 会下载并安装：\n\n• {"\n• ".join(parts)}\n\nJDK 和 .NET SDK 装进 {ba.data_dir() / "tools"}，只给这个应用用；Android SDK 装在 Android Studio 放它的地方。'), QMessageBox.Cancel, self)
+        if sdk: b.setInformativeText(L.t(f'The Android SDK comes from Google: installing its parts means accepting the <a style="color:{READY}" href="https://developer.android.com/studio/terms">Android SDK License</a>. Nothing is sent to Google about you: the SDK\'s usage metrics stay off.',
+                                         f'Android SDK 来自 Google：安装它的各个部分就等于接受 <a style="color:{READY}" href="https://developer.android.com/studio/terms">Android SDK 许可协议</a>。不会有任何关于你的信息发给 Google：SDK 的使用统计保持关闭。'))
+        go = b.addButton(L.t('Accept and install', '接受并安装') if sdk else L.t('Install', '安装'), QMessageBox.AcceptRole); b.setDefaultButton(QMessageBox.Cancel); b.exec()
         if b.clickedButton() is not go: return
         self.win.builds.start(fr.SETUP_TITLE, ['--setup'] + (['--accept-android-licenses'] if sdk else []),
                               after=lambda: (ba.tool_paths(), self.run(), self.win.refresh_devices(), self.win.library.reload()))   # this app's PATH takes the new tools too (adb and dotnet), and the games are read again with them
@@ -1421,7 +1407,7 @@ class SetupPage(QWidget):   # Get started: keys, tools, phone, first game. Not i
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); outer.addWidget(scroll)
         inner = QWidget(); inner.setObjectName('page'); scroll.setWidget(inner)
         lay = QVBoxLayout(inner); lay.setContentsMargins(48, 32, 48, 24); lay.setSpacing(14)
-        lay.addWidget(label('Get started', 'h1'))
+        lay.addWidget(label(L.t('Get started', '开始使用'), 'h1'))
         intro = label(fr.INTRO, 'meta', wrap=True); intro.setTextFormat(Qt.RichText); intro.setMaximumWidth(860); lay.addWidget(intro); lay.addSpacing(8)
         self.cards = {}
         for i, key in enumerate(('keys', 'tools', 'phone', 'game'), 1):
@@ -1434,7 +1420,7 @@ class SetupPage(QWidget):   # Get started: keys, tools, phone, first game. Not i
         if running and self.run is None: self.run = fr.SetupProgress(time.time()); self.failed = None
         elif not running:
             self.run = None; b = self.win.builds
-            self.failed = None if frac >= 0 else (b.last_red or b.last_line or 'see the Builds page for what happened')
+            self.failed = None if frac >= 0 else (b.last_red or b.last_line or L.t('see the Builds page for what happened', '去构建记录页看发生了什么'))
         self.refresh()
     def build_event(self, title, ev):
         if title == fr.SETUP_TITLE and self.run: self.run.feed(ev); self.refresh()
@@ -1450,7 +1436,7 @@ class SetupPage(QWidget):   # Get started: keys, tools, phone, first game. Not i
         self.steps = self.compute(); first = next((s.key for s in self.steps if not s.done), None)
         for s in self.steps: self.cards[s.key].show_step(s, s.key == first)
         n = fr.ready_count(self.steps)
-        self.foot.setText('All set: your game is in the Library.' if n == 4 else 'Settings › Show the setup checklist brings you back here.')
+        self.foot.setText(L.t('All set: your game is in the Library.', '都好了：你的游戏已经在游戏库里。') if n == 4 else L.t('Settings › Show the setup checklist brings you back here.', '「设置 › 显示设置清单」可以回到这里。'))
         return n
     def step(self, key): return next(s for s in self.steps if s.key == key)
     def act(self, key):
@@ -1459,8 +1445,8 @@ class SetupPage(QWidget):   # Get started: keys, tools, phone, first game. Not i
         w = self.win
         if key == 'keys': w.settings.pick_keys()
         elif key == 'tools':
-            if s.button == 'Look again': w.settings.run()
-            elif s.button == 'Open Settings': w.go('settings')
+            if s.button == L.t('Look again', '再看一次'): w.settings.run()
+            elif s.button == L.t('Open Settings', '打开设置'): w.go('settings')
             else: w.settings.install(show_builds=False)
         elif key == 'phone': w.phone_guide()
         elif key == 'game':
@@ -1486,10 +1472,10 @@ class UpdateBar(QWidget):   # under the top bar, on every page, while a newer re
         lay = QHBoxLayout(self); lay.setContentsMargins(28, 10, 28, 10); lay.setSpacing(14)
         self.text = label(''); self.text.setStyleSheet('font-size: 14px; font-weight: 600'); lay.addWidget(self.text); lay.addStretch()
         self.can_update = False
-        self.get = QPushButton('Download'); self.get.clicked.connect(self.go); lay.addWidget(self.get)
-        self.notes = QPushButton("What's new"); self.notes.setObjectName('ghost'); self.notes.clicked.connect(lambda: self.url and QDesktopServices.openUrl(QUrl(self.url)))
+        self.get = QPushButton(L.t('Download', '下载')); self.get.clicked.connect(self.go); lay.addWidget(self.get)
+        self.notes = QPushButton(L.t("What's new", "有什么新的")); self.notes.setObjectName('ghost'); self.notes.clicked.connect(lambda: self.url and QDesktopServices.openUrl(QUrl(self.url)))
         lay.addWidget(self.notes); self.notes.hide()
-        self.later_btn = QPushButton('Not now'); self.later_btn.setObjectName('ghost'); self.later_btn.clicked.connect(self.later); lay.addWidget(self.later_btn)
+        self.later_btn = QPushButton(L.t('Not now', '以后再说')); self.later_btn.setObjectName('ghost'); self.later_btn.clicked.connect(self.later); lay.addWidget(self.later_btn)
         self.hide()
     def go(self):
         if self.can_update: self.win.update_now()
@@ -1497,22 +1483,21 @@ class UpdateBar(QWidget):   # under the top bar, on every page, while a newer re
     def show_release(self, rel):   # Update where DroidPlay-Setup installed this copy and the release has its Setup; the release's page otherwise
         self.tag, self.url = rel['tag'], rel['url']; v = self.tag.lstrip('v')
         self.can_update = bool(rel.get('setup')) and upd.setup_install(REPO)
-        self.get.setEnabled(True); self.later_btn.setText('Not now'); self.notes.setVisible(self.can_update)
+        self.get.setEnabled(True); self.later_btn.setText(L.t('Not now', '以后再说')); self.notes.setVisible(self.can_update)
         if self.can_update:
-            self.get.setText('Update')
-            self.text.setText(f'DroidPlay {v} is out. Update downloads it, then DroidPlay closes and opens again, updated; your games, builds and settings stay.')
+            self.get.setText(L.t('Update', '更新'))
+            self.text.setText(L.t(f'DroidPlay {v} is out. Update downloads it, then DroidPlay closes and opens again, updated; your games, builds and settings stay.', f'DroidPlay {v} 已发布。点「更新」会下载它，然后 DroidPlay 关闭并重新打开，已经是新版本；你的游戏、构建和设置都保留。'))
         else:
-            self.get.setText('Download')
-            self.text.setText(f'DroidPlay {v} is out. Download its installer from the release page; your games, builds and settings stay.')
+            self.get.setText(L.t('Download', '下载'))
+            self.text.setText(L.t(f'DroidPlay {v} is out. Download its installer from the release page; your games, builds and settings stay.', f'DroidPlay {v} 已发布。去 release 页面下载它的安装包；你的游戏、构建和设置都保留。'))
         self.show()
     def show_progress(self, done, total):
-        self.get.setEnabled(False); self.notes.hide(); self.later_btn.setText('Cancel')
-        self.text.setText(f'Downloading DroidPlay {(self.tag or "").lstrip("v")}: ' + (count_text(done, total, 'B') if total else gb_text(done)))
+        self.get.setEnabled(False); self.notes.hide(); self.later_btn.setText(L.t('Cancel', '取消'))
+        self.text.setText(L.t(f'Downloading DroidPlay {(self.tag or "").lstrip("v")}: ', f'正在下载 DroidPlay {(self.tag or "").lstrip("v")}：') + (count_text(done, total, 'B') if total else gb_text(done)))
     def show_switch(self):   # once, in the copy Install DroidPlay.cmd installed: Setup replaces it (droidplay.iss removes the old folder and shortcuts)
         self.tag, self.url, self.can_update = None, 'https://github.com/enjoyerofslop/droidplay-core/releases/latest', False
-        self.get.setText('Get the installer'); self.notes.hide()
-        self.text.setText('DroidPlay has an installer now: it installs like any Windows app, with an entry in Settings › Apps, and replaces this copy. '
-                          'Your games, builds and settings stay.'); self.show()
+        self.get.setText(L.t('Get the installer', '获取安装包')); self.notes.hide()
+        self.text.setText(L.t('DroidPlay has an installer now: it installs like any Windows app, with an entry in Settings › Apps, and replaces this copy. Your games, builds and settings stay.', 'DroidPlay 现在有安装包了：它像普通 Windows 应用一样安装，在「设置 › 应用」里有一个条目，并替换掉这份拷贝。你的游戏、构建和设置都保留。')); self.show()
     def later(self):   # a release until the one after it; the installer for good; a download, cancelled
         if self.win.updating: self.win.updating['cancel'] = True; return
         self.win.st.setValue('update/later' if self.tag else 'switch/later', self.tag or '1'); self.hide()
@@ -1529,20 +1514,20 @@ class Window(QMainWindow):
         top = QWidget(); top.setObjectName('topbar'); top.setAttribute(Qt.WA_StyledBackground, True); tl = QHBoxLayout(top); tl.setContentsMargins(28, 14, 28, 14); tl.setSpacing(6)
         tl.addWidget(label('DroidPlay', 'wordmark'))
         self.navs = {}; group = self.navgroup = QButtonGroup(self); group.setExclusive(True)
-        for key, text, ic in (('library', 'Library', 'library'), ('builds', 'Builds', 'builds'), ('phones', 'Phones', 'phone'), ('perf', 'Performance', 'perf'), ('settings', 'Settings', 'settings')):
+        for key, text, ic in (('library', L.t('Library', '游戏库'), 'library'), ('builds', L.t('Builds', '构建'), 'builds'), ('phones', L.t('Phones', '手机'), 'phone'), ('perf', L.t('Performance', '性能'), 'perf'), ('settings', L.t('Settings', '设置'), 'settings')):
             b = QToolButton(); b.setObjectName('nav'); b.setText(f' {text}'); b.setIcon(icon(ic, TEXT2, 18)); b.setIconSize(QSize(18, 18)); b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
             b.setCheckable(True); b.setCursor(Qt.PointingHandCursor); b.clicked.connect(lambda _=False, k=key: self.go(k)); group.addButton(b); tl.addWidget(b); self.navs[key] = b
         tl.addStretch()
-        self.pill = QPushButton(); self.pill.setObjectName('pill'); self.pill.setCursor(Qt.PointingHandCursor); self.pill.setToolTip('The steps left before your first game')
+        self.pill = QPushButton(); self.pill.setObjectName('pill'); self.pill.setCursor(Qt.PointingHandCursor); self.pill.setToolTip(L.t('The steps left before your first game', '离第一个游戏还差几步'))
         self.pill.clicked.connect(lambda: self.go('setup')); self.pill.hide(); tl.addWidget(self.pill); tl.addSpacing(10)
-        self.phone = QComboBox(); self.phone.setFixedWidth(250); self.phone.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon); self.phone.setMinimumContentsLength(18); self.phone.setToolTip('The phone builds install to'); self.phone.currentIndexChanged.connect(self.phone_changed)
+        self.phone = QComboBox(); self.phone.setFixedWidth(250); self.phone.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon); self.phone.setMinimumContentsLength(18); self.phone.setToolTip(L.t('The phone builds install to', '构建装到哪台手机')); self.phone.currentIndexChanged.connect(self.phone_changed)
         self.phone.view().setMinimumWidth(320)   # the open list may be wider than the box: a phone's name and Android version uncut
         tl.addWidget(self.phone); tl.addSpacing(8)
-        self.search = QLineEdit(); self.search.setPlaceholderText('Search your games'); self.search.setFixedWidth(220); self.search.hide()
+        self.search = QLineEdit(); self.search.setPlaceholderText(L.t('Search your games', '搜索你的游戏')); self.search.setFixedWidth(220); self.search.hide()
         self.search.textChanged.connect(self.filter_games)
         sb = QToolButton(); sb.setObjectName('nav'); sb.setIcon(icon('search', TEXT, 20)); sb.setIconSize(QSize(20, 20)); sb.setCursor(Qt.PointingHandCursor); sb.clicked.connect(self.toggle_search)
         tl.addWidget(self.search); tl.addWidget(sb); tl.addSpacing(8)
-        add = QPushButton('  Build game'); add.setObjectName('ghost'); add.setIcon(icon('plus', TEXT2, 16)); add.setCursor(Qt.PointingHandCursor); add.clicked.connect(self.add_game); tl.addWidget(add)
+        add = QPushButton(L.t('  Build game', '  构建游戏')); add.setObjectName('ghost'); add.setIcon(icon('plus', TEXT2, 16)); add.setCursor(Qt.PointingHandCursor); add.clicked.connect(self.add_game); tl.addWidget(add)
         root.addWidget(top)
         sep = QFrame(); sep.setFixedHeight(1); sep.setStyleSheet(f'background: {LINE}'); root.addWidget(sep)
         self.version = ba.core_version()   # the VERSION file a release carries (its installer's copy too), git describe in a checkout
@@ -1579,7 +1564,7 @@ class Window(QMainWindow):
         if (not upd.release_number(self.version) and not asked) or self.updating: return
         def got(r):
             if isinstance(r, Exception):
-                if asked: self.toast(f'Could not reach GitHub to look for a newer DroidPlay: {r}')
+                if asked: self.toast(L.t(f'Could not reach GitHub to look for a newer DroidPlay: {r}', f'连不上 GitHub，没法查有没有更新的 DroidPlay：{r}'))
                 return
             tag, url = r['tag'], r['url']; self.st.setValue('update/checked', time.strftime('%Y-%m-%d %H:%M')); self.st.setValue('update/latest', tag); self.st.setValue('update/url', url)
             mine, theirs = upd.release_number(self.version), upd.release_number(tag)
@@ -1587,28 +1572,27 @@ class Window(QMainWindow):
             if newer and (asked or self.st.value('update/later', '') != tag): self.updatebar.show_release(r)
             elif not newer: self.updatebar.hide()
             self.settings.show_update(tag if newer else None)
-            if asked and not newer: self.toast(f'DroidPlay {self.version} is the newest' if mine else f'The newest release is {tag}; this copy is {self.version or "of no release"}')
+            if asked and not newer: self.toast(L.t(f'DroidPlay {self.version} is the newest', f'DroidPlay {self.version} 已经是最新的') if mine else L.t(f'The newest release is {tag}; this copy is {self.version or L.t("of no release", "没有版本号")}', f'最新的 release 是 {tag}；这份拷贝是 {self.version or L.t("of no release", "没有版本号")}'))
         bg(upd.latest_release, got)
 
     def update_now(self):   # Update: the release's Setup downloaded and checked, then run silently; DroidPlay closes, and Setup's /RELAUNCH opens the new one
         rel = self.release
         if self.updating or not rel: return
         if not (rel.get('setup') and upd.setup_install(REPO)): QDesktopServices.openUrl(QUrl(rel['url'])); return
-        if self.builds.busy() or self.builds.ext: self.toast('A build is running: wait for it to finish, or stop it, then update'); return
+        if self.builds.busy() or self.builds.ext: self.toast(L.t('A build is running: wait for it to finish, or stop it, then update', '有构建正在跑：等它结束或停掉它，再更新')); return
         v, mb = rel['tag'].lstrip('v'), rel['setup']['size'] / 2**20
-        if QMessageBox.question(self, 'Update DroidPlay', f'Update to DroidPlay {v}?\n\nDroidPlay downloads its installer ({mb:.0f} MB) and checks it against the release, '
-                                'then closes, updates, and opens again. Your games, builds and settings stay.') != QMessageBox.Yes: return
+        if QMessageBox.question(self, L.t('Update DroidPlay', '更新 DroidPlay'), L.t(f'Update to DroidPlay {v}?\n\nDroidPlay downloads its installer ({mb:.0f} MB) and checks it against the release, then closes, updates, and opens again. Your games, builds and settings stay.', f'更新到 DroidPlay {v}？\n\nDroidPlay 会下载它的安装包（{mb:.0f} MB）并对着 release 校验，然后关闭、更新、再打开。你的游戏、构建和设置都保留。')) != QMessageBox.Yes: return
         self.updating = flag = {'cancel': False}; sig = Progress(); sig.moved.connect(self.updatebar.show_progress); self.updatebar.show_progress(0, rel['setup']['size'])
         def fetch(): return upd.download_setup(rel['setup'], ba.data_dir() / 'updates', sig.moved.emit, lambda: flag['cancel'])
         def got(r):
             self.updating = None; sig.deleteLater()
             if isinstance(r, upd.Cancelled): self.updatebar.show_release(rel); return
-            if isinstance(r, Exception): self.updatebar.show_release(rel); QMessageBox.warning(self, 'Update DroidPlay', f'The update could not be downloaded: {r}'); return
+            if isinstance(r, Exception): self.updatebar.show_release(rel); QMessageBox.warning(self, L.t('Update DroidPlay', '更新 DroidPlay'), L.t(f'The update could not be downloaded: {r}', f'更新下载失败：{r}')); return
             if self.builds.busy() or self.builds.ext:   # one started while it downloaded: the installer waits, checked, for the next Update
-                self.updatebar.show_release(rel); self.toast('A build started: Update again once it has finished'); return
+                self.updatebar.show_release(rel); self.toast(L.t('A build started: Update again once it has finished', '构建已开始：等它结束后再点更新')); return
             started = QProcess.startDetached(str(r), ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/RELAUNCH'])
             if not (started[0] if isinstance(started, tuple) else started):
-                self.updatebar.show_release(rel); QMessageBox.warning(self, 'Update DroidPlay', f'Windows did not start {r}. Run it yourself, or download it from the release page.'); return
+                self.updatebar.show_release(rel); QMessageBox.warning(self, L.t('Update DroidPlay', '更新 DroidPlay'), L.t(f'Windows did not start {r}. Run it yourself, or download it from the release page.', f'Windows 没能启动 {r}。你可以自己运行它，或者去 release 页面下载。')); return
             QApplication.quit()   # Setup would close it anyway (the Restart Manager); it opens the new DroidPlay when it is done
         bg(fetch, got)
 
@@ -1647,8 +1631,8 @@ class Window(QMainWindow):
         if self.pages.currentWidget() is self.library and not self.setup.step('tools').done: self.go('setup')
     def setup_changed(self):   # keys, tools, phones or games changed: the checklist's steps, the pill and Settings' line again
         if not hasattr(self, 'library') or not hasattr(self, 'pill'): return   # still making the pages
-        n = self.setup.refresh(); self.pill.setText(f'Setup {n} of 4')
-        self.settings.start_line.setText('All four steps are done.' if n == 4 else f'{n} of 4 steps done.'); self.show_pill()
+        n = self.setup.refresh(); self.pill.setText(L.t(f'Setup {n} of 4', f'设置 {n}/4'))
+        self.settings.start_line.setText(L.t('All four steps are done.', '四步都完成了。') if n == 4 else L.t(f'{n} of 4 steps done.', f'4 步里已完成 {n} 步。')); self.show_pill()
     def show_pill(self):   # while a step is left, but not over the checklist itself, and only once --check and the first read of the games have answered: until then
         # their steps say they are looking, and a set-up player's every launch flashed "Setup 2 of 4"
         n = fr.ready_count(self.setup.steps)
@@ -1662,12 +1646,12 @@ class Window(QMainWindow):
         else: self.search.clear()
     def filter_games(self, t): self.library.filter = t; self.library.render()
     def add_game(self):
-        d = QFileDialog.getExistingDirectory(self, 'The folder with your game: its NSP / XCI files, or a Switch 2 game\'s .nup or dump')
+        d = QFileDialog.getExistingDirectory(self, L.t('The folder with your game: its NSP / XCI files, or a Switch 2 game\'s .nup or dump', '存放游戏文件的文件夹：NSP / XCI 文件，或 Switch 2 游戏的 .nup 或 dump'))
         if not d: return
         fs = [f for f in (self.st.value('folders', []) or []) if f]
         if d not in fs: self.st.setValue('folders', fs + [d])
         if self.pages.currentWidget() is not self.setup: self.go('library')   # the checklist says it reads the game, then what comes next
-        self.library.reload(); self.toast('Reading the game… then Build and install puts it on your phone')
+        self.library.reload(); self.toast(L.t('Reading the game… then Build and install puts it on your phone', '正在读取游戏…读完以后「构建并安装」会把它放到手机上'))
     def stop_build(self): self.builds.stop()
     def keys(self): k = self.st.value('keys', '') or ''; return k if k and Path(k).is_file() else None
     def script_json(self, *args):
@@ -1698,7 +1682,7 @@ class Window(QMainWindow):
             old, back = self.lost, here[self.lost['id']]; self.lost = None
             gone = wifi.stale(devs, old['id'], self.seen, back)
             if gone: bg(lambda: [adb_run(None, 'disconnect', g, timeout=10) for g in gone], lambda _: QTimer.singleShot(0, self.refresh_devices))
-            self.toast(f'{old["name"]} is back over Wi-Fi'); QTimer.singleShot(500, self.perf.resume); return
+            self.toast(L.t(f'{old["name"]} is back over Wi-Fi', f'{old["name"]} 又回到 Wi-Fi 上了')); QTimer.singleShot(500, self.perf.resume); return
         if time.time() > self.lost['until']: self.lost = None; return
         self.reconnect()
     def reconnect(self):   # once every RECONNECT_EVERY s while the phone is lost: its address on the network, by its serial number, else the last one it had
@@ -1784,27 +1768,29 @@ class Window(QMainWindow):
             self.models = {d['serial']: d.get('name') or d.get('model') or d['serial'] for d in r}
             self.phone.blockSignals(True); self.phone.clear()
             for d in phone_id.one_per_phone([d for d in r if d['state'] == 'device']):   # one entry a phone, over the cable when it is on a cable and on Wi-Fi (the Phones page lists both)
-                self.phone.addItem(icon('phone', TEXT2, 16), f'{self.models[d["serial"]]}' + (f' · Android {d.get("android")}' if d.get('android') else ''), d['serial'])
+                self.phone.addItem(icon('phone', TEXT2, 16), f'{self.models[d["serial"]]}' + (L.t(f' · Android {d.get("android")}', f' · 安卓 {d.get("android")}') if d.get('android') else ''), d['serial'])
             # a phone plugged in but not ready: listed, greyed, with what to do; it said "No phone connected" while the phone waited for Allow
             for d in r:
                 if d['state'] in ('unauthorized', 'authorizing', 'offline'):
                     off = d['state'] == 'offline'
-                    self.phone.addItem(icon('phone', ERR if off else BUILD, 16), ((f'Reconnecting to {self.lost["name"]} over Wi-Fi…' if self.lost else 'Wake your phone (Wi-Fi)')
-                                                                       if phone_id.wifi(d['serial']) else 'Plug your phone in again') if off else 'Tap Allow on your phone', None)
+                    self.phone.addItem(icon('phone', ERR if off else BUILD, 16), ((L.t(f'Reconnecting to {self.lost["name"]} over Wi-Fi…', f'正在通过 Wi-Fi 重新连接 {self.lost["name"]}…') if self.lost else L.t('Wake your phone (Wi-Fi)', '唤醒你的手机（Wi-Fi）'))
+                                                                       if phone_id.wifi(d['serial']) else L.t('Plug your phone in again', '把手机重新插上')) if off else L.t('Tap Allow on your phone', '在手机上点「允许」'), None)
                     it = self.phone.model().item(self.phone.count() - 1); it.setEnabled(False)
                     it.setToolTip(re.sub(r'<[^>]+>', '', ex.explain(f'device {d["state"]}', phone=d.get('model', ''), wifi=phone_id.wifi(d['serial'])).body))
-            if not self.phone.count(): self.phone.addItem(icon('phone', BUILD if self.lost else TEXT3, 16), f'Reconnecting to {self.lost["name"]} over Wi-Fi…' if self.lost and adb else
-                                                          'No phone connected' if adb else 'Install the tools to find phones', None)
-            self.phone.setToolTip('The phone builds install to' if adb else 'DroidPlay finds phones with adb, which comes with the tools: Get started, step 2')
+            if not self.phone.count(): self.phone.addItem(icon('phone', BUILD if self.lost else TEXT3, 16), L.t(f'Reconnecting to {self.lost["name"]} over Wi-Fi…', f'正在通过 Wi-Fi 重新连接 {self.lost["name"]}…') if self.lost and adb else
+                                                          L.t('No phone connected', '没有连接手机') if adb else L.t('Install the tools to find phones', '装好工具才能找到手机'), None)
+            self.phone.setToolTip(L.t('The phone builds install to', '构建装到哪台手机') if adb else L.t('DroidPlay finds phones with adb, which comes with the tools: Get started, step 2', 'DroidPlay 用 adb 找手机，adb 随工具一起安装：开始使用，第 2 步'))
             i = self.find_phone(keep); self.phone.setCurrentIndex(i if i >= 0 else 0); self.phone.blockSignals(False)
             self.phones.fill(r, adb); self.phone_changed(0); self.setup_changed()
         bg(look, got)
 
 
 def main():
+    L.set_language(os.environ.get('DM_UI_LANG') or QLocale.system().name())   # a Chinese system reads Chinese; DM_UI_LANG lets a run pick it, as the tests and the console tools stay English
+    if L.zh(): os.environ['DM_UI_LANG'] = 'zh-Hans'   # the builds and --check this window starts speak Chinese too (QProcess and script_json take the environment from here)
     if '--write-icon' in sys.argv[:-1]:   # the Windows installer's shortcuts take DroidPlay's icon as an .ico file (dm/android/windows/install_droidplay.cmd)
         app = QApplication(sys.argv[:1]); path = sys.argv[sys.argv.index('--write-icon') + 1]
-        if not app_icon().pixmap(256, 256).save(path, 'ICO'): sys.exit(f'could not write {path}')
+        if not app_icon().pixmap(256, 256).save(path, 'ICO'): sys.exit(L.t(f'could not write {path}', f'写不了 {path}'))
         return
     if os.name == 'nt':   # a taskbar button of its own, with DroidPlay's name and icon, not grouped with every other Python window
         try: import ctypes; ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('io.github.enjoyerofslop.droidplay.desktop')

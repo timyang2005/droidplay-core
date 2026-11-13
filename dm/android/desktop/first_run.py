@@ -8,22 +8,20 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import phone_guide   # this folder's: the phone's battery and free space
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import i18n as L   # noqa: E402  # pyright: ignore[reportMissingImports]  (this folder's: Chinese on a Chinese system, English elsewhere; the tests read English)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from phone_id import wifi   # noqa: E402  # pyright: ignore[reportMissingImports]  (dm/android/tools, put on the path above: a serial that is a Wi-Fi connection)
 
 TODO, WORKING, WAITING, DONE, PROBLEM = 'todo', 'working', 'waiting', 'done', 'problem'
 WARN = '#f5b82e'   # the app's amber, for a warning inside a done step's text
-SETUP_TITLE = 'Set up this computer'   # the Builds page's title for --setup, from the app or the console (its journal)
+SETUP_TITLE = L.t('Set up this computer', '设置这台电脑')   # the Builds page's title for --setup, from the app or the console (its journal)
 
-INTRO = ('<b>Setting up takes about half an hour the first time:</b> the tools download once (1.5 GB), and the first build of a game takes about 10–20 minutes. '
-         'After that, a new game takes about 10 minutes, and playing again takes seconds.')
-KEYS_INTRO = ('DroidPlay reads your games with the keys from your own Switch, a file called <b>prod.keys</b> (Lockpick_RCM makes it). '
-              "They stay on this PC. A Switch 2 game's .nup or dump folder doesn't need them.")
-TOOLS_INTRO = ("DroidPlay builds games with Microsoft's Java and .NET and Google's Android SDK. They download once: about 1.5 GB, 5 GB on disk.")
-PHONE_INTRO = 'Plug in your Android phone or handheld with a USB cable.'
-GAME_INTRO = ("Pick the folder with a game's NSP or XCI files (the base game, and its update if you have it), or the folder that holds a Switch 2 game's "
-              '.nup file or its dump. '
-              'DroidPlay writes its build files (a few GB) into a folder beside them.')
+INTRO = (L.t('<b>Setting up takes about half an hour the first time:</b> the tools download once (1.5 GB), and the first build of a game takes about 10–20 minutes. After that, a new game takes about 10 minutes, and playing again takes seconds.', '<b>第一次设置大约要半小时：</b>工具只下载一次（1.5 GB），第一个游戏构建大约 10–20 分钟。之后一个新游戏大约 10 分钟，再次游玩只要几秒。'))
+KEYS_INTRO = (L.t("DroidPlay reads your games with the keys from your own Switch, a file called <b>prod.keys</b> (Lockpick_RCM makes it). They stay on this PC. A Switch 2 game's .nup or dump folder doesn't need them.", "DroidPlay 用你自己 Switch 里的密钥来读游戏，那个文件叫 <b>prod.keys</b>（Lockpick_RCM 可以生成）。它们只留在这台电脑上。Switch 2 游戏的 .nup 或 dump 文件夹不需要它们。"))
+TOOLS_INTRO = (L.t("DroidPlay builds games with Microsoft's Java and .NET and Google's Android SDK. They download once: about 1.5 GB, 5 GB on disk.", "DroidPlay 用微软的 Java 和 .NET、Google 的 Android SDK 来构建游戏。它们只下载一次：约 1.5 GB，占盘 5 GB。"))
+PHONE_INTRO = L.t('Plug in your Android phone or handheld with a USB cable.', '用 USB 线插上你的安卓手机或掌机。')
+GAME_INTRO = (L.t("Pick the folder with a game's NSP or XCI files (the base game, and its update if you have it), or the folder that holds a Switch 2 game's .nup file or its dump. DroidPlay writes its build files (a few GB) into a folder beside them.", "选择放着游戏 NSP 或 XCI 文件（本体，以及你有的更新）的文件夹，或放着 Switch 2 游戏 .nup 文件或它 dump 的文件夹。DroidPlay 会把它的构建文件（几个 GB）写到旁边的文件夹里。"))
 
 
 @dataclass
@@ -49,24 +47,24 @@ def _keys_problem(path, _mtime, _size):
         with open(path, encoding='utf-8', errors='replace') as f: text = f.read(1 << 20)
     except OSError as e: return f"DroidPlay can't open it: {esc(e.strerror or e)}."
     # prod.keys names its keys (header_key, master_key_00…); title.keys, the file Lockpick_RCM writes beside it, is rights IDs alone
-    if not re.search(r'^\s*(header_key|master_key_[0-9a-f]{2})\s*=', text, re.M | re.I): return 'This file has no Switch keys in it. Pick prod.keys, not title.keys.'
+    if not re.search(r'^\s*(header_key|master_key_[0-9a-f]{2})\s*=', text, re.M | re.I): return L.t('This file has no Switch keys in it. Pick prod.keys, not title.keys.', '这个文件里没有 Switch 的密钥。请选 prod.keys，不是 title.keys。')
     return None
 
 
 def keys_step(path):
-    title = 'Your keys'
-    if not path: return Step('keys', title, TODO, KEYS_INTRO, 'Choose prod.keys…')
+    title = L.t('Your keys', '你的密钥')
+    if not path: return Step('keys', title, TODO, KEYS_INTRO, L.t('Choose prod.keys…', '选择 prod.keys…'))
     p = Path(path)
     try: st = p.stat()
-    except OSError: return Step('keys', title, PROBLEM, f"The keys file you picked isn't there any more ({esc(path)}). Choose it again.", 'Choose prod.keys…')
+    except OSError: return Step('keys', title, PROBLEM, f"The keys file you picked isn't there any more ({esc(path)}). Choose it again.", L.t('Choose prod.keys…', '选择 prod.keys…'))
     problem = _keys_problem(str(p), st.st_mtime, st.st_size)
     if problem: return Step('keys', title, PROBLEM, f'<b>{esc(p.name)}</b>: {problem}', 'Choose prod.keys…')
-    return Step('keys', title, DONE, f'<b>{esc(p.name)}</b> in {esc(p.parent)}', 'Change…')
+    return Step('keys', title, DONE, f'<b>{esc(p.name)}</b> in {esc(p.parent)}', L.t('Change…', '换一个…'))
 
 
 # --check's rows by the part Install tools brings them with, named as a player knows them
 PARTS = (('Java', lambda n: n.startswith('JDK')), ('.NET', lambda n: n == '.NET SDK 10'),
-         ('the Android SDK', lambda n: n in ('Android SDK', 'adb', 'NDK', 'CMake') or n.startswith(('build-tools ', 'platform '))))
+         (L.t('the Android SDK', 'Android SDK'), lambda n: n in ('Android SDK', 'adb', 'NDK', 'CMake') or n.startswith(('build-tools ', 'platform '))))
 
 
 def missing_parts(rows):
@@ -76,22 +74,22 @@ def missing_parts(rows):
 
 def tools_step(rows, windows, run=None):
     """rows: --check's, or None while it runs. run: ('running', fraction, text) while --setup runs, ('failed', message) after it stopped, else None"""
-    title = 'Tools for building'
+    title = L.t('Tools for building', '构建用的工具')
     if run and run[0] == 'running': return Step('tools', title, WORKING, esc(run[2]), fraction=run[1])
-    if rows is None: return Step('tools', title, WORKING, 'Looking at what this PC has…')
+    if rows is None: return Step('tools', title, WORKING, L.t('Looking at what this PC has…', '正在查看这台电脑有什么…'))
     bad = [r for r in rows if not r['ok']]
     check = next((r for r in bad if r['name'] == 'check'), None)
-    if check: return Step('tools', title, PROBLEM, f"DroidPlay couldn't look at what this PC has: {esc(check['detail'])}", 'Look again')
+    if check: return Step('tools', title, PROBLEM, f"DroidPlay couldn't look at what this PC has: {esc(check['detail'])}", L.t('Look again', '再看一次'))
     python = [r['name'].split()[-1] for r in bad if r['name'].startswith('Python')]
     parts = missing_parts(rows)
     if run and run[0] == 'failed' and parts:
-        return Step('tools', title, PROBLEM, f'Installing the tools stopped: {esc(run[1])}', 'Try again' if windows else '')
+        return Step('tools', title, PROBLEM, f'Installing the tools stopped: {esc(run[1])}', L.t('Try again', '再试一次') if windows else '')
     if parts:
         what = TOOLS_INTRO if len(parts) == len(PARTS) else f"{TOOLS_INTRO.split('. ')[0]}. Still to install: {', '.join(parts)}."
-        return Step('tools', title, TODO, what if windows else f"{what} Settings says how to get each one.", 'Install tools…' if windows else 'Open Settings')
+        return Step('tools', title, TODO, what if windows else L.t(f"{what} Settings says how to get each one.", f"{what} 设置页写着怎么获取每一个。"), L.t('Install tools…', '安装工具…') if windows else L.t('Open Settings', '打开设置'))
     if python:   # the app's own: Setup and uv run bring them, so only a Python picked by hand misses them
-        return Step('tools', title, PROBLEM, f"The Python that runs DroidPlay doesn't have {esc(', '.join(python))}. Settings says how to get them.", 'Open Settings')
-    return Step('tools', title, DONE, 'Java, .NET and the Android SDK are on this PC.')
+        return Step('tools', title, PROBLEM, L.t(f"The Python that runs DroidPlay doesn't have {esc(', '.join(python))}. Settings says how to get them.", f"运行 DroidPlay 的这个 Python 缺 {esc(', '.join(python))}。设置页写着怎么装它们。"), L.t('Open Settings', '打开设置'))
+    return Step('tools', title, DONE, L.t('Java, .NET and the Android SDK are on this PC.', '这台电脑上已经有 Java、.NET 和 Android SDK。'))
 
 
 def phone_name(d): return d.get('name') or d.get('model') or ''
@@ -100,56 +98,56 @@ def phone_name(d): return d.get('name') or d.get('model') or ''
 def phone_step(devs, adb, picked=None, seen=False):
     """devs: refresh_devices' list (serial, state, name, model, android), None before the first look. adb: whether adb is installed. picked: the top bar's phone.
     seen: a phone was picked before (the app keeps the last one), so one unplugged now was still set up"""
-    title = 'Your phone'
+    title = L.t('Your phone', '你的手机')
     if not adb:
-        return Step('phone', title, DONE if seen else TODO, ("Your phone was set up before. DroidPlay finds it again once the tools are back (step 2)." if seen else
-                                                           f'{PHONE_INTRO} DroidPlay finds it with Android\'s adb, which comes with the tools (step 2).'), '' if seen else 'Set up my phone…')
-    if devs is None: return Step('phone', title, WORKING, 'Looking for your phone…')
+        return Step('phone', title, DONE if seen else TODO, (L.t("Your phone was set up before. DroidPlay finds it again once the tools are back (step 2).", "你的手机之前设置过。工具装回来以后（第 2 步），DroidPlay 会重新找到它。") if seen else
+                                                           L.t(f'{PHONE_INTRO} DroidPlay finds it with Android\'s adb, which comes with the tools (step 2).', f'{PHONE_INTRO} DroidPlay 用安卓的 adb 找它，adb 随工具一起安装（第 2 步）。')), '' if seen else L.t('Set up my phone…', '设置我的手机…'))
+    if devs is None: return Step('phone', title, WORKING, L.t('Looking for your phone…', '正在找你的手机…'))
     ready = sorted((d for d in devs if d['state'] == 'device'), key=lambda d: d['serial'] != picked)
     if ready:
         d = ready[0]; low = phone_guide.battery_warning(d)
         return Step('phone', title, DONE, f'<b>{esc(phone_name(d) or d["serial"])}</b>' + (f' · Android {esc(d["android"])}' if d.get('android') else '') +
                     phone_guide.readout(d) + (f'<br><span style="color:{WARN}">⚠ {esc(low)}</span>' if low else ''))
     for d in devs:   # adb lists a phone that hasn't allowed this PC with no model or name: "Your phone" then
-        name = esc(phone_name(d) or 'Your phone')
+        name = esc(phone_name(d) or L.t('Your phone', '你的手机'))
         if d['state'] in ('unauthorized', 'authorizing'):
-            return Step('phone', title, WAITING, f'<b>{name}</b> is waiting: unlock it and tap <b>Allow</b> on "Allow USB debugging?"', 'Set up my phone…')
+            return Step('phone', title, WAITING, L.t(f'<b>{name}</b> is waiting: unlock it and tap <b>Allow</b> on "Allow USB debugging?"', f'<b>{name}</b> 在等着：解锁它，在「允许 USB 调试？」上点 <b>允许</b>'), 'Set up my phone…')
         if d['state'] == 'offline':
-            return Step('phone', title, PROBLEM, f"<b>{name}</b> isn't answering over Wi-Fi: wake it, and check that Wireless debugging is still on." if wifi(d['serial'])
-                        else f"<b>{name}</b> isn't answering: unplug it and plug it back in.", 'Set up my phone…')
+            return Step('phone', title, PROBLEM, L.t(f"<b>{name}</b> isn't answering over Wi-Fi: wake it, and check that Wireless debugging is still on.", f"<b>{name}</b> 在 Wi-Fi 上没应答：唤醒它，并确认无线调试还开着。") if wifi(d['serial'])
+                        else L.t(f"<b>{name}</b> isn't answering: unplug it and plug it back in.", f"<b>{name}</b> 没应答：把它拔下来再插回去。"), 'Set up my phone…')
     if devs:   # Linux's "no permissions", a phone in recovery: adb's own word, as the Phones page shows it
-        d = devs[0]; return Step('phone', title, PROBLEM, f'<b>{esc(phone_name(d) or "Your phone")}</b> is connected but not ready (adb says "{esc(d["state"])}").', 'Set up my phone…')
-    if seen: return Step('phone', title, DONE, "Your phone was set up before. It isn't plugged in now.")
+        d = devs[0]; return Step('phone', title, PROBLEM, L.t(f'<b>{esc(phone_name(d) or "Your phone")}</b> is connected but not ready (adb says "{esc(d["state"])}").', f'<b>{esc(phone_name(d) or "你的手机")}</b> 已经连上但还没就绪（adb 说是「{esc(d["state"])}」）。'), L.t('Set up my phone…', '设置我的手机…'))
+    if seen: return Step('phone', title, DONE, L.t("Your phone was set up before. It isn't plugged in now.", "你的手机之前设置过。现在没插着。"))
     return Step('phone', title, TODO, PHONE_INTRO, 'Set up my phone…')
 
 
-PLAY_LABELS = {'build': 'Build and install', 'install': 'Install on phone', 'play': 'Play'}
+PLAY_LABELS = {'build': L.t('Build and install', '构建并安装'), 'install': L.t('Install on phone', '安装到手机'), 'play': L.t('Play', '开始游戏')}
 
 
 def game_step(folders, games, reading):
     """folders: the game folders added; games: what reading them gave, as dicts (folder, name, state as Game.status gives it, tested, error); reading: a read runs"""
-    title = 'Your first game'
+    title = L.t('Your first game', '你的第一个游戏')
     ok = [g for g in games if g['state'] not in ('keys', 'tools', 'none')]
     if ok:
         g = ok[0]; label = PLAY_LABELS.get(g['state'], '')
-        how = 'not supported yet' if g['state'] == 'survey' else 'played on Android' if g.get('tested') else 'not played on Android yet'
-        took = ' · the first build takes about 10–20 minutes' if g['state'] == 'build' else ''
-        return Step('game', title, DONE, f'<b>{esc(g["name"])}</b> · {how}{took}', label or 'Add another game…', ref=g['folder'] if label else '')
+        how = L.t('not supported yet', '还不支持') if g['state'] == 'survey' else L.t('played on Android', '已在安卓上玩过') if g.get('tested') else L.t('not played on Android yet', '还没在安卓上玩过')
+        took = L.t(' · the first build takes about 10–20 minutes', ' · 第一次构建大约要 10–20 分钟') if g['state'] == 'build' else ''
+        return Step('game', title, DONE, f'<b>{esc(g["name"])}</b> · {how}{took}', label or L.t('Add another game…', '再添加一个游戏…'), ref=g['folder'] if label else '')
     if reading:
-        name = Path(folders[-1]).name if folders else 'your game'
-        return Step('game', title, WORKING, f'Reading <b>{esc(name)}</b>… The first read can take a few minutes while DroidPlay prepares its game reader.', fraction=-1)
+        name = Path(folders[-1]).name if folders else L.t('your game', '你的游戏')
+        return Step('game', title, WORKING, L.t(f'Reading <b>{esc(name)}</b>… The first read can take a few minutes while DroidPlay prepares its game reader.', f'正在读取 <b>{esc(name)}</b>… 第一次读取要几分钟，DroidPlay 在准备它的游戏读取器。'), fraction=-1)
     if games:
         g = games[0]; name = esc(g['name'])
-        if g['state'] == 'keys': return Step('game', title, TODO, f'<b>{name}</b> is added. DroidPlay reads it once your keys are in (step 1).')
-        if g['state'] == 'tools': return Step('game', title, TODO, f'<b>{name}</b> is added. DroidPlay reads it once the tools are installed (step 2).')
-        return Step('game', title, PROBLEM, f"DroidPlay couldn't read <b>{name}</b>: {esc(g.get('error') or 'no game in that folder')}", 'Add a game…')
+        if g['state'] == 'keys': return Step('game', title, TODO, L.t(f'<b>{name}</b> is added. DroidPlay reads it once your keys are in (step 1).', f'<b>{name}</b> 已添加。密钥就位以后（第 1 步），DroidPlay 就会读取它。'))
+        if g['state'] == 'tools': return Step('game', title, TODO, L.t(f'<b>{name}</b> is added. DroidPlay reads it once the tools are installed (step 2).', f'<b>{name}</b> 已添加。工具装好以后（第 2 步），DroidPlay 就会读取它。'))
+        return Step('game', title, PROBLEM, L.t(f"DroidPlay couldn't read <b>{name}</b>: {esc(g.get('error') or L.t('no game in that folder', '那个文件夹里没有游戏'))}", f"DroidPlay 读不了 <b>{name}</b>：{esc(g.get('error') or '那个文件夹里没有游戏')}"), L.t('Add a game…', '添加游戏…'))
     return Step('game', title, TODO, GAME_INTRO, 'Add a game…')
 
 
 # ---- Install tools' one bar ----
 # --setup's stages in the order host_setup.setup() runs them, each with what it downloads (MB): a stage's share of the bar, as about 1.6 GB in all
-SETUP_STAGES = (('JDK 21', 'Java', 190), ('.NET SDK 10', '.NET', 290), ('Android command-line tools', 'the Android tools', 150), ('Android SDK packages', 'the Android SDK', 950))
-PACKAGE_NAMES = {'platform-tools': 'adb', 'platforms': 'the platform', 'build-tools': 'the build tools', 'ndk': 'the NDK', 'cmake': 'CMake'}
+SETUP_STAGES = (('JDK 21', 'Java', 190), ('.NET SDK 10', '.NET', 290), ('Android command-line tools', L.t('the Android tools', 'Android 命令行工具'), 150), ('Android SDK packages', L.t('the Android SDK', 'Android SDK'), 950))
+PACKAGE_NAMES = {'platform-tools': 'adb', 'platforms': L.t('the platform', '平台'), 'build-tools': L.t('the build tools', '构建工具'), 'ndk': L.t('the NDK', 'NDK'), 'cmake': 'CMake'}
 # the SDK's packages in the order --setup installs them (build_android_from_nsp.sdk_packages), with what each downloads (MB): the NDK is most of the stage, and
 # counted as one package of five the bar said 70% through the stage while it installed (measured on the test PC: 50 of its 60 seconds)
 PACKAGE_MB = (('platform-tools', 10), ('platforms', 60), ('build-tools', 60), ('ndk', 700), ('cmake', 20))
@@ -160,7 +158,7 @@ def mb_text(n): return f'{n / 2**30:.1f} GB' if n >= 2**30 else f'{n / 2**20:.0f
 
 def left_text(sec):   # rounded, so it doesn't jump about as a countdown would
     if sec is None: return ''
-    return 'less than a minute left' if sec < 60 else f'about {round(sec / 60)} minute{"" if round(sec / 60) == 1 else "s"} left'
+    return L.t('less than a minute left', '还剩不到一分钟') if sec < 60 else L.t(f'about {round(sec / 60)} minute{"" if round(sec / 60) == 1 else "s"} left', f'大约还剩 {round(sec / 60)} 分钟')
 
 
 class SetupProgress:
@@ -202,16 +200,16 @@ class SetupProgress:
         return min(done / total, 1.0)
 
     def text(self, now):
-        if not self.seen: return 'Starting…'
+        if not self.seen: return L.t('Starting…', '正在开始…')
         plain = {s[0]: s[1] for s in SETUP_STAGES}.get(self.seen[-1], self.seen[-1]); step = self.ev.get('step') or ''
         if step.startswith('downloading'):
-            line = f'Downloading {plain}'
-            if self.ev.get('unit') == 'B' and self.ev.get('total'): line += f' · {mb_text(self.ev.get("done") or 0)} of {mb_text(self.ev["total"])}'
-        elif step.startswith('unpacking'): line = f'Unpacking {plain}'
+            line = L.t(f'Downloading {plain}', f'正在下载 {plain}')
+            if self.ev.get('unit') == 'B' and self.ev.get('total'): line += L.t(f' · {mb_text(self.ev.get("done") or 0)} of {mb_text(self.ev["total"])}', f' · {mb_text(self.ev.get("done") or 0)} / {mb_text(self.ev["total"])}')
+        elif step.startswith('unpacking'): line = L.t(f'Unpacking {plain}', f'正在解压 {plain}')
         elif step.startswith('installing '):
             pkg = step.split(' ', 1)[1].split(';')[0]; n, total = self.ev.get('done'), self.ev.get('total')
-            line = f'Installing {plain} · {PACKAGE_NAMES.get(pkg, pkg)}' + (f' ({n + 1} of {total})' if total and n is not None and n < total else '')
-        else: line = f'Installing {plain}'
+            line = L.t(f'Installing {plain} · {PACKAGE_NAMES.get(pkg, pkg)}', f'正在安装 {plain} · {PACKAGE_NAMES.get(pkg, pkg)}') + (L.t(f' ({n + 1} of {total})', f'（{n + 1}/{total}）') if total and n is not None and n < total else '')
+        else: line = L.t(f'Installing {plain}', f'正在安装 {plain}')
         f, took = self.fraction(), now - self.t0
         left = took * (1 - f) / f if f >= 0.02 and took >= 10 else None   # the rate so far, once there is one
         return line + (f' · {left_text(left)}' if left is not None else '')

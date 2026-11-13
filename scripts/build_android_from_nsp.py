@@ -41,6 +41,10 @@ except ImportError: sys.path.append(str(REPO / 'dm/android/tools/compat'))   # W
 if os.name == 'nt': os.environ.setdefault('DM_REWRITE_J', '1')   # patch_nso.py's parallel scans fork their workers with SIGTERM blocked, which Windows cannot: one there
 import build_ipa_from_nsp as bi   # noqa: E402
 from build_ipa_from_nsp import BuildError, say   # noqa: E402
+DESKTOP = str(REPO / 'dm/android/desktop')
+sys.path.insert(0, DESKTOP)
+import i18n as L   # noqa: E402  # pyright: ignore[reportMissingImports]  (the desktop app's: --check's rows are what its Settings page shows, Chinese on a Chinese system)
+sys.path.remove(DESKTOP)   # nothing else of that folder's: its module names are plain words ('update', 'wifi'), not to shadow anyone's
 
 PKG = 'org.nxnative.android'
 # One signing key for every build on this computer: an update must be signed like the installed app, and uninstalling it would delete the saves and the game files on the phone
@@ -1341,7 +1345,7 @@ def tool_version(cmd):
 def check(sdk_arg):
     rows = []
     def row(name, ok, detail, fix=''):
-        if os.name == 'nt' and fix and not name.startswith('Python'): fix = "Install what's missing (the desktop app's Settings), or build_android_from_nsp.py --setup"
+        if os.name == 'nt' and fix and not name.startswith('Python'): fix = L.t("Install what's missing (the desktop app's Settings), or build_android_from_nsp.py --setup", "点「安装缺少的东西」（桌面端设置页），或运行 build_android_from_nsp.py --setup")
         rows.append({'name': name, 'ok': bool(ok), 'detail': detail, 'fix': '' if ok else fix})
     for m, pip in (('lz4.block', 'lz4'), ('capstone', 'capstone'), ('fontTools', 'fonttools'), ('zbic', 'zbic'), ('PySide6', 'PySide6')):
         row(f'Python module {pip}', bi._importable(m), sys.executable, f'{sys.executable} -m pip install {pip}')
@@ -1349,10 +1353,10 @@ def check(sdk_arg):
     row('Python zstd', z, sys.executable, f'{sys.executable} -m pip install backports.zstd (or Python 3.14+)')
     env = dict(os.environ)
     try: bi.configure_dotnet(env); dn = tool_version(['dotnet', '--version'])
-    except BuildError as e: dn = None; row('.NET SDK 10', False, str(e), 'install the .NET 10 SDK: https://dotnet.microsoft.com/download')
-    else: row('.NET SDK 10', dn and dn.split('.')[0] == '10', dn or 'not found', 'install the .NET 10 SDK: https://dotnet.microsoft.com/download')
+    except BuildError as e: dn = None; row('.NET SDK 10', False, str(e), L.t('install the .NET 10 SDK: https://dotnet.microsoft.com/download', '安装 .NET 10 SDK：https://dotnet.microsoft.com/download'))
+    else: row('.NET SDK 10', dn and dn.split('.')[0] == '10', dn or L.t('not found', '未找到'), 'install the .NET 10 SDK: https://dotnet.microsoft.com/download')
     try: sdk = sdk_dir(sdk_arg)
-    except BuildError: sdk = None; row('Android SDK', False, 'not found', 'install Android Studio or the command-line tools, then set ANDROID_HOME (or give --sdk)')
+    except BuildError: sdk = None; row('Android SDK', False, L.t('not found', '未找到'), L.t('install Android Studio or the command-line tools, then set ANDROID_HOME (or give --sdk)', '安装 Android Studio 或命令行工具，然后设置 ANDROID_HOME（或加 --sdk）'))
     else: row('Android SDK', True, str(sdk))
     if sdk:
         for what, d in (('NDK', sdk / 'ndk'), ('CMake', sdk / 'cmake')):
@@ -1361,12 +1365,12 @@ def check(sdk_arg):
         row(f'build-tools {BUILD_TOOLS}', (sdk / 'build-tools' / BUILD_TOOLS).is_dir(), str(sdk / 'build-tools' / BUILD_TOOLS), f'sdkmanager "build-tools;{BUILD_TOOLS}"')
         row(f'platform {PLATFORM}', (sdk / 'platforms' / PLATFORM / 'android.jar').is_file(), str(sdk / 'platforms' / PLATFORM), f'sdkmanager "platforms;{PLATFORM}"')
     a = tool_version(['adb', 'version'])
-    row('adb', a, a.splitlines()[0] if a else 'not found', 'install the Android SDK platform-tools and put them on PATH')
+    row('adb', a, a.splitlines()[0] if a else L.t('not found', '未找到'), L.t('install the Android SDK platform-tools and put them on PATH', '安装 Android SDK 的 platform-tools，并加进 PATH'))
     for t in ('keytool', 'javac'):
         v = shutil.which(t)
         if v and os.name == 'nt': v = str(Path(v).with_suffix(Path(v).suffix.lower()))   # which() spells the extension as PATHEXT does (javac.EXE), not as the file is named
-        row(f'JDK {t}', v, v or 'not found', 'install a JDK (17 or newer) and put its bin folder on PATH')
-    row('signing key', True, f'{KEYSTORE}' + ('' if KEYSTORE.is_file() else ' (made at the first build)'))
+        row(f'JDK {t}', v, v or L.t('not found', '未找到'), L.t('install a JDK (17 or newer) and put its bin folder on PATH', '安装 JDK（17 或更新），并把它的 bin 目录加进 PATH'))
+    row('signing key', True, f'{KEYSTORE}' + ('' if KEYSTORE.is_file() else L.t(' (made at the first build)', '（第一次构建时生成）')))
     hosts = library(); row('game hosts', True, f'{len(hosts)} in {data_dir() / "hosts"}' + (': ' + ', '.join(hosts) if hosts else ''))
     return rows
 
