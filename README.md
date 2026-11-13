@@ -1,6 +1,8 @@
 <!-- The "droidnative" anchor keeps links made before the rename working: the project was droidnative until 2026-11-09. -->
 # <a id="droidnative"></a>DroidPlay Core
 
+[English](README.md) · [简体中文](README.zh-CN.md)
+
 [![Latest release](https://img.shields.io/github/v/release/enjoyerofslop/droidplay-core?label=latest%20release)](https://github.com/enjoyerofslop/droidplay-core/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/enjoyerofslop/droidplay-core)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-DroidPlay-5865F2?logo=discord&logoColor=white)](https://discord.gg/3r92f8wmh7)
