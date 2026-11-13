@@ -230,7 +230,7 @@ final class Saves {
     // f in place of tid's save. Each part goes to saves/<tid> (account) or saves/<tid>_device: a device save alone goes to _device only where the game keeps one
     // there (it mounts both kinds; hle_fs.c h_fs_MountDeviceSave), else it is the game's one save. Call keep first
     static void install(File internal, String tid, Found f, Xattrs xa) throws IOException {
-        File saves = new File(internal, "saves"); if (!saves.isDirectory() && !saves.mkdirs()) throw new IOException("can't make " + saves);
+        File saves = new File(internal, "saves"); if (!saves.isDirectory() && !saves.mkdirs()) throw new IOException(Loc.f("can't make %s", "建不了 %s", saves));
         String acc = tid, dev = f.account != null || new File(saves, tid + "_device").isDirectory() ? tid + "_device" : tid;
         if (f.account != null) put(saves, acc, f.account, f.xattrs, f.xattrsAccount, xa);
         if (f.device != null) put(saves, dev, f.device, f.xattrs, f.xattrsDevice, xa);
@@ -241,8 +241,8 @@ final class Saves {
         if (xa != null && tsv != null && top != null && tsv.isFile()) xa.apply(tmp, top, tsv);
         for (String left : new String[] {".work", ".new"}) deleteTree(new File(saves, part + left));   // the host's copies of a save it was writing; discarded at its next start anyway
         deleteTree(side);
-        if (dst.exists() && !dst.renameTo(side)) { deleteTree(tmp); throw new IOException("can't move " + dst + " aside"); }
-        if (!tmp.renameTo(dst)) { side.renameTo(dst); deleteTree(tmp); throw new IOException("can't move " + tmp + " into place"); }
+        if (dst.exists() && !dst.renameTo(side)) { deleteTree(tmp); throw new IOException(Loc.f("can't move %s aside", "挪不开 %s", dst)); }
+        if (!tmp.renameTo(dst)) { side.renameTo(dst); deleteTree(tmp); throw new IOException(Loc.f("can't move %s into place", "放不进 %s 的位置", tmp)); }
         deleteTree(side);
     }
 
@@ -348,7 +348,7 @@ final class Saves {
     static File[] sorted(File[] fs) { if (fs == null) return new File[0]; Arrays.sort(fs); return fs; }
     // A copy of a save folder: junk left out everywhere, a backup tool's own files at its top (top), each file's attributes read into tsv when given
     static void copy(File s, File d, String rel, StringBuilder tsv, Xattrs xa, boolean top) throws IOException {
-        if (!d.isDirectory() && !d.mkdirs()) throw new IOException("can't make " + d);
+        if (!d.isDirectory() && !d.mkdirs()) throw new IOException(Loc.f("can't make %s", "建不了 %s", d));
         if (xa != null && tsv != null) xa.read(s, rel, tsv);
         for (File k : list(s)) {
             if (top && meta(k.getName())) continue;

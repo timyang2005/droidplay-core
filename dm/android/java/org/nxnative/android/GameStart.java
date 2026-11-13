@@ -60,7 +60,7 @@ public class GameStart extends Activity {
         super.onCreate(b);
         JSONObject g;
         try { g = new JSONObject(new String(readAsset("game/game.json"), StandardCharsets.UTF_8)); }
-        catch (Exception e) { fail("This app holds no game (assets/game/game.json): " + e); return; }
+        catch (Exception e) { fail(Loc.f("This app holds no game (assets/game/game.json): %s", "本应用里没有游戏（assets/game/game.json）：%s", e)); return; }
         id = g.optString("title_id").toUpperCase(Locale.ROOT); name = g.optString("name", id); romfsBytes = g.optLong("romfs_bytes", -1);
         dataBytes = g.optLong("data_bytes", romfsBytes); dlcAt = g.optLong("dlc_at", 0);
         File ext = getExternalFilesDir(null); if (ext == null) ext = getFilesDir();
@@ -76,7 +76,7 @@ public class GameStart extends Activity {
             File mark = new File(dir, ".unpacked");
             if (!stamp.equals(readFile(mark)) || !new File(dir, "code/main.fixups.tsv").isFile()) unpack(mark, stamp);
             ui(new Runnable() { public void run() { romfs(); } });
-        } catch (Exception e) { fail("Couldn't unpack " + name + ": " + e); }
+        } catch (Exception e) { fail(Loc.f("Couldn't unpack %s: %s", "解不开 %s：%s", name, e)); }
     }
 
     // assets/game/** except the RomFS → games/<title ID>/, the folders the host reads replaced whole (an update can drop files); the player's own files there
@@ -89,10 +89,10 @@ public class GameStart extends Activity {
         for (String top : new String[] {"code", "spv", "font", "aoc"}) rm(new File(dir, top));
         dir.mkdirs(); byte[] buf = new byte[1 << 16]; int n = 0;
         for (String f : files) {
-            if (++n % 200 == 1 || n == files.size()) say(String.format(Locale.ROOT, "Preparing %s for its first start… %d of %d files", name, n, files.size()));
+            if (++n % 200 == 1 || n == files.size()) say(Loc.f("Preparing %s for its first start… %d of %d files", "正在为 %s 首次启动做准备… %d / %d 个文件", name, n, files.size()));
             if (f.equals("game/" + SPV_ZIP)) {   // the shaders: one entry, many files
                 try (InputStream in = am.open(f, AssetManager.ACCESS_STREAMING)) {
-                    unzip(in, new File(dir, "spv"), buf, new Count() { public void at(int k) { say(String.format(Locale.ROOT, "Preparing %s for its first start… %d shaders", name, k)); } });
+                    unzip(in, new File(dir, "spv"), buf, new Count() { public void at(int k) { say(Loc.f("Preparing %s for its first start… %d shaders", "正在为 %s 首次启动做准备… %d 个着色器", name, k)); } });
                 }
                 continue;
             }
@@ -136,7 +136,7 @@ public class GameStart extends Activity {
             long off = a.getStartOffset(), len = a.getLength(); a.close();
             start(fd, off, len); return;
         } catch (java.io.FileNotFoundException none) {   // not in the APK: the app's OBB file (an XAPK's), else the file the player picked
-        } catch (Exception e) { fail("Couldn't open " + name + "'s data in the app: " + e); return; }
+        } catch (Exception e) { fail(Loc.f("Couldn't open %s's data in the app: %s", "打不开 %s 在应用里的数据：%s", name, e)); return; }
         String obb = null;
         try {
             String file = "main." + getPackageManager().getPackageInfo(getPackageName(), 0).getLongVersionCode() + "." + getPackageName() + ".obb";
@@ -146,16 +146,16 @@ public class GameStart extends Activity {
                 obb = open(ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY), f.getPath());
                 if (obb == null) return;
             }
-        } catch (Exception e) { obb = "The game data in the app's OBB folder can't be read: " + e.getMessage(); }
+        } catch (Exception e) { obb = Loc.f("The game data in the app's OBB folder can't be read: %s", "应用 OBB 文件夹里的游戏数据读不了：%s", e.getMessage()); }
         String u = prefs().getString(PREF_URI, null), why = null;
         if (u != null) {
-            try { why = open(getContentResolver().openFileDescriptor(Uri.parse(u), "r"), "the file you picked"); }
-            catch (SecurityException e) { why = "This app may no longer read the game data you picked before."; }
-            catch (Exception e) { why = "The game data you picked before can't be opened: " + e.getMessage(); }
+            try { why = open(getContentResolver().openFileDescriptor(Uri.parse(u), "r"), Loc.t("the file you picked", "你选的文件")); }
+            catch (SecurityException e) { why = Loc.t("This app may no longer read the game data you picked before.", "本应用可能已经读不了你之前选的游戏数据了。"); }
+            catch (Exception e) { why = Loc.f("The game data you picked before can't be opened: %s", "你之前选的游戏数据打不开：%s", e.getMessage()); }
             if (why == null) return;
         }
-        if (why != null || obb != null) say((why != null ? why : obb) + "\n\nPick " + dataName() + " again.");
-        else say("Pick " + name + "'s game data: the file " + dataName() + " that came with this app (" + gb(dataBytes) + "). Put it anywhere on this device or its SD card first; the app reads it where it is.");
+        if (why != null || obb != null) say((why != null ? why : obb) + Loc.f("\n\nPick %s again.", "\n\n请重新选择 %s。", dataName()));
+        else say(Loc.f("Pick %s's game data: the file %s that came with this app (%s). Put it anywhere on this device or its SD card first; the app reads it where it is.", "请选择 %s 的游戏数据：随本应用一起拿到的 %s 文件（%s）。先把它放到这台设备的任意位置或它的 SD 卡上；应用会就地读取它。", name, dataName(), gb(dataBytes)));
         choose.setVisibility(View.VISIBLE);
     }
 
@@ -163,25 +163,25 @@ public class GameStart extends Activity {
     // else why not. The copy runs on a thread of its own, and a failure there is shown when it comes
     String open(final ParcelFileDescriptor p, String what) {
         try {
-            if (p == null) return "The game data (" + what + ") can't be opened.";
+            if (p == null) return Loc.f("The game data (%s) can't be opened.", "游戏数据（%s）打不开。", what);
             final long size = p.getStatSize(); byte[] h = new byte[8];
             int got = Os.pread(p.getFileDescriptor(), h, 0, 8, 0);
-            if (got != 8 || !new String(h, StandardCharsets.US_ASCII).equals("DMROMFS1")) { p.close(); return "That file (" + what + ") isn't " + name + "'s game data."; }
-            if (dataBytes > 0 && size != dataBytes) { p.close(); return String.format(Locale.ROOT, "That file (%s) is %s, but %s's game data is %s: it's another version, or not copied completely.", what, gb(size), name, gb(dataBytes)); }
+            if (got != 8 || !new String(h, StandardCharsets.US_ASCII).equals("DMROMFS1")) { p.close(); return Loc.f("That file (%s) isn't %s's game data.", "那个文件（%s）不是 %s 的游戏数据。", what, name); }
+            if (dataBytes > 0 && size != dataBytes) { p.close(); return Loc.f("That file (%s) is %s, but %s's game data is %s: it's another version, or not copied completely.", "那个文件（%s）是 %s，但 %s 的游戏数据是 %s：它要么是别的版本，要么没复制完整。", what, gb(size), name, gb(dataBytes)); }
             final long len = romfsBytes > 0 ? romfsBytes : size;
             if (dlcAt <= 0) { start(p.detachFd(), 0, len); return null; }
             new Thread(new Runnable() { public void run() {
                 String why;
-                try { why = dlc(p.getFileDescriptor()); } catch (Exception e) { why = "Couldn't copy " + name + "'s DLC out of its game data: " + e.getMessage(); }
+                try { why = dlc(p.getFileDescriptor()); } catch (Exception e) { why = Loc.f("Couldn't copy %s's DLC out of its game data: %s", "没能把 %s 的 DLC 从它的游戏数据里复制出来：%s", name, e.getMessage()); }
                 if (why != null) {
                     try { p.close(); } catch (IOException e) { /* closing */ }
                     say(why); ui(new Runnable() { public void run() { choose.setVisibility(View.VISIBLE); } }); return;
                 }
                 final int fd = p.detachFd();
-                ui(new Runnable() { public void run() { try { start(fd, 0, len); } catch (Exception e) { fail("Couldn't start " + name + ": " + e); } } });
+                ui(new Runnable() { public void run() { try { start(fd, 0, len); } catch (Exception e) { fail(Loc.f("Couldn't start %s: %s", "启动不了 %s：%s", name, e)); } } });
             } }, "dlc").start();
             return null;
-        } catch (Exception e) { return "The game data (" + what + ") can't be read: " + e.getMessage(); }
+        } catch (Exception e) { return Loc.f("The game data (%s) can't be read: %s", "游戏数据（%s）读不了：%s", what, e.getMessage()); }
     }
 
     // A DLC pack's first 16 bytes → its image count, or -1 when they aren't a pack's. Its whole header (16 + 24 per image) and the pack's length → each image's
@@ -208,11 +208,11 @@ public class GameStart extends Activity {
     String dlc(FileDescriptor fd) throws Exception {
         byte[] h = new byte[16];
         int n = Os.pread(fd, h, 0, 16, dlcAt) == 16 ? dlcCount(h) : -1;
-        if (n < 0) return "The game data holds no DLC where this app expects it: pick the file that came with this app.";
+        if (n < 0) return Loc.t("The game data holds no DLC where this app expects it: pick the file that came with this app.", "游戏数据里没有本应用要找的那段 DLC：请选择随本应用一起拿到的那个文件。");
         byte[] head = new byte[16 + 24 * n];
-        for (int at = 0, k; at < head.length; at += k) if ((k = Os.pread(fd, head, at, head.length - at, dlcAt + at)) <= 0) return "The DLC in the game data can't be read: it ends early.";
+        for (int at = 0, k; at < head.length; at += k) if ((k = Os.pread(fd, head, at, head.length - at, dlcAt + at)) <= 0) return Loc.t("The DLC in the game data can't be read: it ends early.", "游戏数据里的 DLC 读不了：它中途就断了。");
         long[][] r = dlcRecords(head, dataBytes - dlcAt);
-        if (r == null) return "The DLC in the game data can't be read: an image lies outside it.";
+        if (r == null) return Loc.t("The DLC in the game data can't be read: an image lies outside it.", "游戏数据里的 DLC 读不了：有个镜像落在它外面。");
         int[] idx = new int[n]; long[] off = new long[n], len = new long[n]; long total = 0;
         for (int i = 0; i < n; i++) { idx[i] = (int) r[i][0]; off[i] = r[i][1]; len[i] = r[i][2]; total += len[i]; }
         CRC32 c = new CRC32(); c.update(head); String mark = dataBytes + ":" + Long.toHexString(c.getValue());
@@ -221,7 +221,7 @@ public class GameStart extends Activity {
         for (int i = 0; i < n && have; i++) have = new File(aoc, idx[i] + ".img").length() == len[i];
         if (have) return null;
         rm(aoc); aoc.mkdirs();
-        if (aoc.getUsableSpace() < total + (64L << 20)) return String.format(Locale.ROOT, "There isn't room on this device to copy %s's DLC out of its game data (%s).", name, gb(total));
+        if (aoc.getUsableSpace() < total + (64L << 20)) return Loc.f("There isn't room on this device to copy %s's DLC out of its game data (%s).", "这台设备上没有足够的空间，把 %s 的 DLC 从它的游戏数据里复制出来（%s）。", name, gb(total));
         byte[] buf = new byte[4 << 20]; long done = 0, shown = -1;
         for (int i = 0; i < n; i++) {
             File part = new File(aoc, idx[i] + ".img.part");
@@ -230,7 +230,7 @@ public class GameStart extends Activity {
                     int k = Os.pread(fd, buf, 0, (int) Math.min(buf.length, left), pos);
                     if (k <= 0) throw new IOException("the game data ends early");
                     o.write(buf, 0, k); pos += k; left -= k; done += k;
-                    if (done / (64L << 20) != shown) { shown = done / (64L << 20); say(String.format(Locale.ROOT, "Copying %s's DLC for its first start… %s of %s", name, gb(done), gb(total))); }
+                    if (done / (64L << 20) != shown) { shown = done / (64L << 20); say(Loc.f("Copying %s's DLC for its first start… %s of %s", "正在复制 %s 首次启动要用的 DLC… %s / %s", name, gb(done), gb(total))); }
                 }
             }
             if (!part.renameTo(new File(aoc, idx[i] + ".img"))) throw new IOException("can't name " + part);
@@ -243,10 +243,10 @@ public class GameStart extends Activity {
         if (req != PICK || res != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData(); String why;
         try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (SecurityException e) { /* this start only */ }
-        try { why = open(getContentResolver().openFileDescriptor(uri, "r"), "the file you picked"); }
-        catch (Exception e) { why = "The file you picked can't be opened: " + e.getMessage(); }
+        try { why = open(getContentResolver().openFileDescriptor(uri, "r"), Loc.t("the file you picked", "你选的文件")); }
+        catch (Exception e) { why = Loc.f("The file you picked can't be opened: %s", "你选的文件打不开：%s", e.getMessage()); }
         if (why == null) prefs().edit().putString(PREF_URI, uri.toString()).apply();
-        else say(why + "\n\nPick " + dataName() + " again.");
+        else say(why + Loc.f("\n\nPick %s again.", "\n\n请重新选择 %s。", dataName()));
     }
 
     void start(int fd, long off, long len) throws Exception {
@@ -268,8 +268,8 @@ public class GameStart extends Activity {
         if (icon == null) try { byte[] j = readAsset("game/icon.jpg"); icon = BitmapFactory.decodeByteArray(j, 0, j.length); } catch (Exception e) { /* no icon */ }
         if (icon != null) { ImageView iv = new ImageView(this); iv.setImageBitmap(icon); iv.setClipToOutline(true); col.addView(iv, new LinearLayout.LayoutParams(px(120), px(120))); }
         TextView t = text(name, 22, Launcher.TEXT); t.setTypeface(Typeface.create("sans-serif", Typeface.BOLD)); t.setPadding(0, px(16), 0, px(8)); col.addView(t);
-        status = text("Starting…", 14, Launcher.TEXT2); status.setMaxWidth(px(560)); col.addView(status);
-        choose = text("Choose the game data…", 16, Launcher.INK); choose.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        status = text(Loc.t("Starting…", "正在启动…"), 14, Launcher.TEXT2); status.setMaxWidth(px(560)); col.addView(status);
+        choose = text(Loc.t("Choose the game data…", "选择游戏数据…"), 16, Launcher.INK); choose.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         choose.setPadding(px(22), px(10), px(22), px(10)); choose.setBackgroundColor(Launcher.CREAM); choose.setVisibility(View.GONE);
         choose.setOnClickListener(new View.OnClickListener() { public void onClick(View v) {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
@@ -289,7 +289,7 @@ public class GameStart extends Activity {
     int px(int dp) { return Math.round(dp * getResources().getDisplayMetrics().density); }
     SharedPreferences prefs() { return getSharedPreferences("game", MODE_PRIVATE); }
     String dataName() { return name.replaceAll("[/\\\\:*?\"<>|]", "").trim() + ".romfs"; }
-    static String gb(long b) { return b < 0 ? "its size unknown" : String.format(Locale.ROOT, "%.1f GB", b / 1e9); }
+    static String gb(long b) { return b < 0 ? Loc.t("its size unknown", "大小未知") : String.format(Locale.ROOT, "%.1f GB", b / 1e9); }
 
     byte[] readAsset(String path) throws Exception {
         try (InputStream in = getAssets().open(path)) { java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream(); byte[] buf = new byte[8192]; for (int k; (k = in.read(buf)) > 0; ) o.write(buf, 0, k); return o.toByteArray(); }

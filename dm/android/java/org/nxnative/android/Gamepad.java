@@ -360,7 +360,7 @@ public final class Gamepad extends View {
                 float[] o = knob(0); float k = K_KNOB_R * u;
                 shape(c, circle(homeX() + o[0], homeY() + o[1], k), stick[0] >= 0); c.drawCircle(homeX() + o[0], homeY() + o[1], k * 0.62f, line);
             }
-            shape(c, circle(swapCx(), swapCy(), K_SWAP_R * u), swapHeld); label(c, tap ? "Tap" : full ? "3D" : "2D", swapCx(), swapCy(), 12 * u, swapHeld);
+            shape(c, circle(swapCx(), swapCy(), K_SWAP_R * u), swapHeld); label(c, tap ? Loc.t("Tap", "点按") : full ? "3D" : "2D", swapCx(), swapCy(), 12 * u, swapHeld);
         }
         float ma = menuAlpha();
         if (ma > 0) {
@@ -399,8 +399,8 @@ public final class Gamepad extends View {
     }
     RectF menuRow(int i) { RectF b = menuBox(); float u = baseU(), t = b.top + (K_MENU_HEAD + i * K_MENU_ROW) * u; return new RectF(b.left + K_MENU_PAD * u, t, b.right - K_MENU_PAD * u, t + K_MENU_ROW * u); }
     int menuRowAt(float x, float y) { for (int i = 0, n = menuN(); i < n; i++) if (menuRow(i).contains(x, y)) return i; return -1; }
-    String menuLabel(int i) { i = menuId(i); return i == M_RESUME ? "Resume" : i == M_LAYOUT ? "Touch controls" : i == M_FPS ? "Frame-rate counter" : i == M_SAVE ? "Export or import the save…" : hasLauncher() ? "Back to the launcher" : "Home screen"; }
-    String menuValue(int i) { i = menuId(i); return i == M_LAYOUT ? (tap ? "Tap" : full ? "3D" : "2D") : i == M_FPS ? (fpsOn ? "On" : "Off") : null; }
+    String menuLabel(int i) { i = menuId(i); return i == M_RESUME ? Loc.t("Resume", "继续游戏") : i == M_LAYOUT ? Loc.t("Touch controls", "触屏控件") : i == M_FPS ? Loc.t("Frame-rate counter", "帧率计数器") : i == M_SAVE ? Loc.t("Export or import the save…", "导出或导入存档…") : hasLauncher() ? Loc.t("Back to the launcher", "返回启动器") : Loc.t("Home screen", "回到桌面"); }
+    String menuValue(int i) { i = menuId(i); return i == M_LAYOUT ? (tap ? Loc.t("Tap", "点按") : full ? "3D" : "2D") : i == M_FPS ? (fpsOn ? Loc.t("On", "开") : Loc.t("Off", "关")) : null; }
     void menuAct(int i) {
         i = menuId(i);
         performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
@@ -438,7 +438,7 @@ public final class Gamepad extends View {
         c.drawColor(Color.argb(140, 0, 0, 0));   // the held picture, dimmed
         p.setColor(Color.argb(238, 28, 28, 32)); c.drawRoundRect(b, 16 * u, 16 * u, p);
         p.setTextSize(15 * u); Paint.FontMetrics fm = p.getFontMetrics();
-        p.setColor(Color.argb(150, 255, 255, 255)); p.setTextAlign(Paint.Align.CENTER); c.drawText("Paused", b.centerX(), b.top + K_MENU_HEAD * u / 2 - (fm.ascent + fm.descent) / 2, p);
+        p.setColor(Color.argb(150, 255, 255, 255)); p.setTextAlign(Paint.Align.CENTER); c.drawText(Loc.t("Paused", "已暂停"), b.centerX(), b.top + K_MENU_HEAD * u / 2 - (fm.ascent + fm.descent) / 2, p);
         p.setTextSize(17 * u); fm = p.getFontMetrics();
         for (int i = 0, n = menuN(); i < n; i++) {
             RectF r = menuRow(i); float y = r.centerY() - (fm.ascent + fm.descent) / 2; String v = menuValue(i);

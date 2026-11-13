@@ -61,11 +61,11 @@ final class LauncherSaves {
     // ---------------- the rows ----------------
     View rows(final Launcher.Game g) {
         LinearLayout box = new LinearLayout(l); box.setOrientation(LinearLayout.VERTICAL);
-        TextView h = l.caps("Save"); h.setPadding(0, l.px(18), 0, l.px(6)); box.addView(h);
-        box.addView(row("Export save", "A zip of the save, to keep, or to take to another phone or an emulator.", "Export…", new Runnable() { public void run() { export(g); } }));
-        box.addView(row("Import save", "From a zip or a folder: a DroidPlay export, Ryujinx's or a yuzu-family emulator's save folder, JKSV, EdiZon, Checkpoint, or a PC "
-            + "port's. The save here is kept first.", "Import…", new Runnable() { public void run() { importAsk(g); } }));
-        box.addView(row("Earlier saves", "The saves kept before an import, and Back up saves' copies.", "Restore…", new Runnable() { public void run() { restoreAsk(g); } }));
+        TextView h = l.caps(Loc.t("Save", "存档")); h.setPadding(0, l.px(18), 0, l.px(6)); box.addView(h);
+        box.addView(row(Loc.t("Export save", "导出存档"), Loc.t("A zip of the save, to keep, or to take to another phone or an emulator.", "一份存档的 zip：留着备份，或带去别的手机、别的模拟器。"), Loc.t("Export…", "导出…"), new Runnable() { public void run() { export(g); } }));
+        box.addView(row(Loc.t("Import save", "导入存档"), Loc.t("From a zip or a folder: a DroidPlay export, Ryujinx's or a yuzu-family emulator's save folder, JKSV, EdiZon, Checkpoint, or a PC port's. The save here is kept first.",
+            "来自 zip 或文件夹：DroidPlay 导出的、Ryujinx 或 yuzu 系模拟器的存档目录、JKSV、EdiZon、Checkpoint，或者 PC 移植版的。这里现有的存档会先保留。"), Loc.t("Import…", "导入…"), new Runnable() { public void run() { importAsk(g); } }));
+        box.addView(row(Loc.t("Earlier saves", "更早的存档"), Loc.t("The saves kept before an import, and Back up saves' copies.", "导入前保留的存档，以及「备份存档」留下的副本。"), Loc.t("Restore…", "恢复…"), new Runnable() { public void run() { restoreAsk(g); } }));
         return box;
     }
     View row(String label, String note, String button, final Runnable go) {
@@ -84,62 +84,62 @@ final class LauncherSaves {
     void whenClosed(final Launcher.Game g, String doing, final Runnable go) {
         String running = l.runningGame();
         if (running == null || !running.equalsIgnoreCase(g.id)) { go.run(); return; }
-        new AlertDialog.Builder(l, DIALOG).setTitle(g.name + " is running")
-            .setMessage("Close it to " + doing + "? Progress it has not saved is lost.")
-            .setPositiveButton("Close it", new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { l.endGame(); l.ui.postDelayed(go, 600); } })
-            .setNegativeButton("Cancel", null).show();
+        new AlertDialog.Builder(l, DIALOG).setTitle(Loc.f("%s is running", "%s 正在运行", g.name))
+            .setMessage(Loc.f("Close it to %s? Progress it has not saved is lost.", "关掉它才能%s，继续吗？它没保存的进度会丢失。", doing))
+            .setPositiveButton(Loc.t("Close it", "关掉它"), new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { l.endGame(); l.ui.postDelayed(go, 600); } })
+            .setNegativeButton(Loc.t("Cancel", "取消"), null).show();
     }
     void pick(Launcher.Game g, Intent i, int req) {
         l.app.edit().putString(PREF, g.id).apply();
         try { l.startActivityForResult(i, req); }
-        catch (android.content.ActivityNotFoundException e) { info("No file picker", "This phone has no app that picks files: " + e.getMessage()); }
+        catch (android.content.ActivityNotFoundException e) { info(Loc.t("No file picker", "没有文件选择器"), Loc.f("This phone has no app that picks files: %s", "这台手机没有能选文件的应用：%s", e.getMessage())); }
     }
 
     // ---------------- export ----------------
     void export(final Launcher.Game g) {
-        if (!hasSave(g.id)) { info("No save yet", g.name + " has no save on this phone yet: play it until it saves, then export it."); return; }
-        whenClosed(g, "export its save", new Runnable() { public void run() {
+        if (!hasSave(g.id)) { info(Loc.t("No save yet", "还没有存档"), Loc.f("%s has no save on this phone yet: play it until it saves, then export it.", "%s 在这台手机上还没有存档：玩到它存一次档，再来导出。", g.name)); return; }
+        whenClosed(g, Loc.t("export its save", "导出存档"), new Runnable() { public void run() {
             Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip")
-                .putExtra(Intent.EXTRA_TITLE, fileName(g.name) + " save " + new SimpleDateFormat("yyyy-MM-dd HHmm", Locale.ROOT).format(new Date()) + ".zip");
+                .putExtra(Intent.EXTRA_TITLE, fileName(g.name) + Loc.t(" save ", " 存档 ") + new SimpleDateFormat("yyyy-MM-dd HHmm", Locale.ROOT).format(new Date()) + ".zip");
             pick(g, i, EXPORT);
         } });
     }
     void exportTo(final Launcher.Game g, final Uri uri) {
-        working("Exporting " + g.name + "'s save…", new Runnable() { public void run() {
-            String readme = "DroidPlay save export: " + g.name + " (" + g.id + ")" + (g.version != null ? ", version " + g.version : "") + ", " + now() + ".\n\n"
-                + "saves/" + g.id + "/ holds the save as the game sees it, and saves/" + g.id + "_device/ its device save, for a game that has both. DroidPlay imports this zip "
-                + "as it is (the game's screen > Import save). For an emulator, copy the files inside saves/" + g.id + "/ into its save folder for this game.\n"
-                + "xattrs.tsv: the files' extended attributes, which DroidPlay puts back.\n";
+        working(Loc.f("Exporting %s's save…", "正在导出 %s 的存档…", g.name), new Runnable() { public void run() {
+            String readme = Loc.f("DroidPlay save export: %s (%s)%s, %s.\n\n", "DroidPlay 存档导出：%s（%s）%s，%s。\n\n", g.name, g.id, g.version != null ? Loc.f(", version %s", "，版本 %s", g.version) : "", now())
+                + Loc.f("saves/%s/ holds the save as the game sees it, and saves/%s_device/ its device save, for a game that has both. DroidPlay imports this zip as it is (the game's screen > Import save). For an emulator, copy the files inside saves/%s/ into its save folder for this game.\n",
+                    "saves/%s/ 里是游戏看到的那份存档，saves/%s_device/ 是它的设备存档（两者都有的游戏才有）。DroidPlay 原样导入这个 zip（游戏的设置页 > 导入存档）。要拿去别的模拟器用，把 saves/%s/ 里的文件复制到它这个游戏的存档文件夹。\n", g.id, g.id, g.id)
+                + Loc.t("xattrs.tsv: the files' extended attributes, which DroidPlay puts back.\n", "xattrs.tsv：这些文件的扩展属性，DroidPlay 会一并放回去。\n");
             try (OutputStream o = cr().openOutputStream(uri, "w")) {
-                if (o == null) throw new IOException("the place picked can't be written");
+                if (o == null) throw new IOException(Loc.t("the place picked can't be written", "选的位置写不进去"));
                 int n = Saves.export(l.internal, g.id, o, readme, XA);
                 Log.i(Launcher.TAG, "save of " + g.id + " exported: " + n + " files to " + uri);
-                done("Save exported", String.format(Locale.ROOT, "%s's save (%d files) is in %s.", g.name, n, name(uri)));
+                done(Loc.t("Save exported", "存档已导出"), Loc.f("%s's save (%d files) is in %s.", "%s 的存档（%d 个文件）在 %s。", g.name, n, name(uri)));
             } catch (Exception e) {
                 Log.w(Launcher.TAG, "export: " + e);
                 try { DocumentsContract.deleteDocument(cr(), uri); } catch (Exception gone) { /* the provider keeps it, or it is gone */ }
-                done("Export failed", "The save couldn't be written: " + e.getMessage());
+                done(Loc.t("Export failed", "导出失败"), Loc.f("The save couldn't be written: %s", "存档写不进去：%s", e.getMessage()));
             }
         } });
     }
 
     // ---------------- import ----------------
     void importAsk(final Launcher.Game g) {
-        whenClosed(g, "import a save", new Runnable() { public void run() {
-            new AlertDialog.Builder(l, DIALOG).setTitle("Import a save for " + g.name)
-                .setItems(new String[] {"From a zip file", "From a folder"}, new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) {
+        whenClosed(g, Loc.t("import a save", "导入存档"), new Runnable() { public void run() {
+            new AlertDialog.Builder(l, DIALOG).setTitle(Loc.f("Import a save for %s", "为 %s 导入存档", g.name))
+                .setItems(new String[] {Loc.t("From a zip file", "从 zip 文件"), Loc.t("From a folder", "从文件夹")}, new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) {
                     if (w == 0) pick(g, new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), IMPORT_FILE);
                     else pick(g, new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), IMPORT_FOLDER);
-                } }).setNegativeButton("Cancel", null).show();
+                } }).setNegativeButton(Loc.t("Cancel", "取消"), null).show();
         } });
     }
     void staged(final Launcher.Game g, final Uri uri, final boolean folder) {
-        working("Reading what you picked…", new Runnable() { public void run() {
+        working(Loc.t("Reading what you picked…", "正在读取你选的内容…"), new Runnable() { public void run() {
             File st = staging(); Saves.deleteTree(st); st.mkdirs(); String why;
             long limit = Math.min(8L << 30, l.internal.getUsableSpace() / 3);   // the copy here, the copy beside the save, and room left
             try { why = folder ? stageFolder(uri, st, limit) : stageFile(uri, st, limit); }
-            catch (Exception e) { Log.w(Launcher.TAG, "import: " + e); why = String.valueOf(e.getMessage()).startsWith("too big") ? "It's bigger than this phone has room for." : "It can't be read: " + e.getMessage(); }
-            if (why != null) { Saves.deleteTree(st); done("Nothing imported", why); return; }
+            catch (Exception e) { Log.w(Launcher.TAG, "import: " + e); why = String.valueOf(e.getMessage()).startsWith("too big") ? Loc.t("It's bigger than this phone has room for.", "它比这台手机能腾出的空间还大。") : Loc.f("It can't be read: %s", "读不了：%s", e.getMessage()); }
+            if (why != null) { Saves.deleteTree(st); done(Loc.t("Nothing imported", "没有导入任何东西"), why); return; }
             final List<Saves.Found> fs = Saves.find(st, g.id, Saves.names(new File(saves(), g.id)), Saves.names(new File(saves(), g.id + "_device")));
             then(new Runnable() { public void run() { source = staging(); computer = false; choose(g, fs); } });
         } });
@@ -147,15 +147,15 @@ final class LauncherSaves {
     String stageFile(Uri uri, File st, long limit) throws IOException {
         File zip = new File(l.getCacheDir(), "import.zip"); String name = name(uri);
         try {
-            try (InputStream in = cr().openInputStream(uri)) { if (in == null) throw new IOException("the file can't be opened"); copy(in, zip, limit); }
+            try (InputStream in = cr().openInputStream(uri)) { if (in == null) throw new IOException(Loc.t("the file can't be opened", "这个文件打不开")); copy(in, zip, limit); }
             String kind = Saves.kind(Saves.head(zip, 8));
-            if (kind == null) return name + " isn't a zip. Pick a zip of the save, or the folder that holds its files (From a folder).";
-            if (!kind.equals("zip")) return kind + " archives can't be opened on a phone: unpack " + name + " first (with a file manager app, or on a computer), then import its folder.";
+            if (kind == null) return Loc.f("%s isn't a zip. Pick a zip of the save, or the folder that holds its files (From a folder).", "%s 不是 zip。请选存档的 zip，或装着它文件的文件夹（「从文件夹」）。", name);
+            if (!kind.equals("zip")) return Loc.f("%s archives can't be opened on a phone: unpack %s first (with a file manager app, or on a computer), then import its folder.", "%s 压缩包在手机上打不开：先用手机上的文件管理器、或在电脑上把 %s 解压，再导入它的文件夹。", kind, name);
             try { Saves.unzip(zip, st, limit); }
             catch (IOException e) {
                 String m = String.valueOf(e.getMessage());
-                if (m.startsWith("method ")) return name + " is packed with a compression Android can't unpack (" + (m.equals("method 9") ? "Deflate64, which Windows uses for big zips" : m)
-                    + "): unpack it with a file manager app or on a computer, then import its folder.";
+                if (m.startsWith("method ")) return Loc.f("%s is packed with a compression Android can't unpack (%s): unpack it with a file manager app or on a computer, then import its folder.",
+                    "%s 用的压缩方式 Android 解不开（%s）：用文件管理器应用或电脑解压，再导入它的文件夹。", name, m.equals("method 9") ? Loc.t("Deflate64, which Windows uses for big zips" , "Deflate64，Windows 压大 zip 用的就是它") : m);
                 throw e;
             }
             return null;
@@ -168,25 +168,25 @@ final class LauncherSaves {
         if (name == null || name.isEmpty() || name.contains("/") || name.startsWith(".")) name = "picked";
         long[] left = {limit}; int[] n = {0};
         walk(tree, id, new File(st, name), left, n, 0);
-        return n[0] == 0 ? "The folder " + name + " holds no files." : null;
+        return n[0] == 0 ? Loc.f("The folder %s holds no files.", "文件夹 %s 里没有文件。", name) : null;
     }
     void walk(Uri tree, String id, File dst, long[] left, int[] n, int depth) throws IOException {
         if (depth > 16) return;
-        if (!dst.isDirectory() && !dst.mkdirs()) throw new IOException("can't make " + dst);
+        if (!dst.isDirectory() && !dst.mkdirs()) throw new IOException(Loc.f("can't make %s", "建不了 %s", dst));
         String[] cols = {Document.COLUMN_DOCUMENT_ID, Document.COLUMN_DISPLAY_NAME, Document.COLUMN_MIME_TYPE, Document.COLUMN_LAST_MODIFIED};
         try (Cursor c = cr().query(DocumentsContract.buildChildDocumentsUriUsingTree(tree, id), cols, null, null, null)) {
-            if (c == null) throw new IOException("the folder can't be listed");
+            if (c == null) throw new IOException(Loc.t("the folder can't be listed", "这个文件夹列不出来"));
             while (c.moveToNext()) {
                 String kid = c.getString(0), name = c.getString(1), mime = c.getString(2);
                 if (name == null || name.isEmpty() || name.equals(".") || name.equals("..") || name.contains("/") || Saves.junk(name)) continue;
                 File out = new File(dst, name);
                 if (Document.MIME_TYPE_DIR.equals(mime)) { walk(tree, kid, out, left, n, depth + 1); continue; }
                 try (InputStream in = cr().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree, kid))) {
-                    if (in == null) throw new IOException(name + " can't be opened");
+                    if (in == null) throw new IOException(Loc.f("%s can't be opened", "%s 打不开", name));
                     left[0] -= copy(in, out, left[0]);
                 }
                 if (!c.isNull(3) && c.getLong(3) > 0) out.setLastModified(c.getLong(3));   // the save's own times, for the player to tell saves apart
-                if (++n[0] % 50 == 0) say(String.format(Locale.ROOT, "Reading what you picked… %d files", n[0]));
+                if (++n[0] % 50 == 0) say(Loc.f("Reading what you picked… %d files", "正在读取你选的内容… %d 个文件", n[0]));
             }
         }
     }
@@ -194,30 +194,32 @@ final class LauncherSaves {
     void choose(final Launcher.Game g, final List<Saves.Found> fs) {
         if (fs.isEmpty()) {
             cleanup();
-            info("No save found", "Nothing in " + (computer ? "what your computer sent" : "what you picked") + " looks like a save. Pick the folder that holds the save's files, or a zip of it: for an emulator, the folder its "
-                + "\"Open save data location\" opens, or the one above it.");
+            info(Loc.t("No save found", "没找到存档"), Loc.f("Nothing in %s looks like a save. Pick the folder that holds the save's files, or a zip of it: for an emulator, the folder its \"Open save data location\" opens, or the one above it.",
+                "%s 里没有像存档的东西。请选装着存档文件的文件夹，或它的 zip；模拟器的话，就是它「打开存档数据位置」打开的那个文件夹，或者它的上一层。",
+                computer ? Loc.t("what your computer sent", "电脑发来的内容") : Loc.t("what you picked", "你选的内容")));
             return;
         }
         if (fs.size() == 1) { confirm(g, fs.get(0)); return; }
         String[] items = new String[fs.size()];
         for (int i = 0; i < items.length; i++) items[i] = what(fs.get(i)) + "\n" + size(fs.get(i));
-        new AlertDialog.Builder(l, DIALOG).setTitle(computer ? "Which save from your computer, for " + g.name + "?" : "Which save?")
+        new AlertDialog.Builder(l, DIALOG).setTitle(computer ? Loc.f("Which save from your computer, for %s?", "用电脑上的哪份存档给 %s？", g.name) : Loc.t("Which save?", "哪份存档？"))
             .setItems(items, new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { confirm(g, fs.get(w)); } })
-            .setNegativeButton("Cancel", new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { cleanup(); } })
+            .setNegativeButton(Loc.t("Cancel", "取消"), new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { cleanup(); } })
             .setCancelable(false).show();
     }
     void confirm(final Launcher.Game g, final Saves.Found f) {
         boolean other = f.titleId != null && !f.titleId.equalsIgnoreCase(g.id);
-        StringBuilder m = new StringBuilder(what(f)).append('\n').append(size(f)).append("\nIt holds: ").append(Saves.top(f.main(), 6)).append('\n');
-        if (other) m.append("\nThis is the save of another game: ").append(l.nameOf(f.titleId)).append(" (").append(f.titleId).append("). It won't load in ").append(g.name).append(" unless that is the same game from another region.\n");
-        else if (f.titleId == null && !f.matched) m.append("\nThese files don't say which game they're from: check that they're ").append(g.name).append("'s.\n");
-        if (f.matched) m.append("\nTheir names match ").append(g.name).append("'s save on this phone.\n");
-        else if (f.unmatched) m.append("\nThey share no names with ").append(g.name).append("'s save on this phone, which holds ").append(Saves.top(new File(saves(), g.id), 4)).append(".\n");
-        if (g.version != null) m.append("\nThe game here is version ").append(g.version).append(": a save from a later update may not load.\n");
-        m.append('\n').append(hasSave(g.id) ? "The save " + g.name + " has now is kept first: Earlier saves > Restore puts it back." : g.name + " has no save on this phone yet.");
-        new AlertDialog.Builder(l, DIALOG).setTitle(computer ? "Import this save from your computer?" : "Import this save?").setMessage((computer ? "For " + g.name + ": " : "") + m)
-            .setPositiveButton(other ? "Import anyway" : "Import", new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { install(g, f, false); } })
-            .setNegativeButton("Cancel", new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { cleanup(); } })
+        StringBuilder m = new StringBuilder(what(f)).append('\n').append(size(f)).append(Loc.t("\nIt holds: ", "\n内容：")).append(top(f.main(), 6)).append('\n');
+        if (other) m.append(Loc.f("\nThis is the save of another game: %s (%s). It won't load in %s unless that is the same game from another region.\n", "\n这是另一个游戏的存档：%s（%s）。除非它是同一个游戏的其他区版本，否则 %s 载入不了。\n", l.nameOf(f.titleId), f.titleId, g.name));
+        else if (f.titleId == null && !f.matched) m.append(Loc.f("\nThese files don't say which game they're from: check that they're %s's.\n", "\n这些文件没说是哪个游戏的：请确认它们是 %s 的。\n", g.name));
+        if (f.matched) m.append(Loc.f("\nTheir names match %s's save on this phone.\n", "\n它们的文件名和这台手机上 %s 的存档对得上。\n", g.name));
+        else if (f.unmatched) m.append(Loc.f("\nThey share no names with %s's save on this phone, which holds %s.\n", "\n它们和这台手机上 %s 的存档没有一个同名文件，那份存档里是 %s。\n", g.name, top(new File(saves(), g.id), 4)));
+        if (g.version != null) m.append(Loc.f("\nThe game here is version %s: a save from a later update may not load.\n", "\n这里的游戏是版本 %s：更晚的更新存下的存档可能载入不了。\n", g.version));
+        m.append('\n').append(hasSave(g.id) ? Loc.f("The save %s has now is kept first: Earlier saves > Restore puts it back.", "%s 现在的存档会先保留：「更早的存档 > 恢复」可以把它放回去。", g.name) : Loc.f("%s has no save on this phone yet.", "%s 在这台手机上还没有存档。", g.name));
+        new AlertDialog.Builder(l, DIALOG).setTitle(computer ? Loc.t("Import this save from your computer?", "从电脑导入这份存档吗？") : Loc.t("Import this save?", "导入这份存档吗？"))
+            .setMessage((computer ? Loc.f("For %s: ", "给 %s：", g.name) : "") + m)
+            .setPositiveButton(other ? Loc.t("Import anyway", "仍然导入") : Loc.t("Import", "导入"), new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { install(g, f, false); } })
+            .setNegativeButton(Loc.t("Cancel", "取消"), new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { cleanup(); } })
             .setCancelable(false).show();
     }
 
@@ -226,26 +228,29 @@ final class LauncherSaves {
         final String running = l.runningGame();
         if (running != null && running.equalsIgnoreCase(g.id)) {   // started from the desktop app while the picker was up
             if (!restoring) cleanup();
-            info("Nothing imported", g.name + " is running: close it, then try again."); return;
+            info(Loc.t("Nothing imported", "没有导入任何东西"), Loc.f("%s is running: close it, then try again.", "%s 正在运行：关掉它再试一次。", g.name)); return;
         }
-        working(restoring ? "Putting the save back…" : "Importing the save…", new Runnable() { public void run() {
+        working(restoring ? Loc.t("Putting the save back…", "正在放回存档…") : Loc.t("Importing the save…", "正在导入存档…"), new Runnable() { public void run() {
             File keep = new File(backups(), new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + "-" + g.id);
             boolean kept;
             try {
-                kept = Saves.keep(l.internal, g.id, keep, "DroidPlay save backup: " + g.name + " (" + g.id + ")'s save before " + (restoring ? "a restore" : "an import") + ", " + now()
-                    + ".\nThe game's screen in DroidPlay > Earlier saves > Restore puts it back; so does copying this folder to backups/restore/ on the phone.\n", XA);
+                kept = Saves.keep(l.internal, g.id, keep, Loc.f("DroidPlay save backup: %s (%s)'s save before %s, %s.\nThe game's screen in DroidPlay > Earlier saves > Restore puts it back; so does copying this folder to backups/restore/ on the phone.\n",
+                    "DroidPlay 存档备份：%s（%s）在%s之前的存档，%s。\n在 DroidPlay 该游戏的设置页用「更早的存档 > 恢复」就能放回去；把这个文件夹复制到手机上的 backups/restore/ 也可以。\n",
+                    g.name, g.id, restoring ? Loc.t("a restore", "恢复") : Loc.t("an import", "导入"), now()), XA);
             } catch (IOException e) {
                 Saves.deleteTree(keep); if (!restoring) cleanup();
-                done("Nothing imported", "The save " + g.name + " has now couldn't be kept first (" + e.getMessage() + "), so it was left as it is. Free some space and try again.");
+                done(Loc.t("Nothing imported", "没有导入任何东西"), Loc.f("The save %s has now couldn't be kept first (%s), so it was left as it is. Free some space and try again.", "%s 现在的存档没能先保留（%s），所以它原样没动。腾出一些空间再试。", g.name, e.getMessage()));
                 return;
             }
             try {
                 Saves.install(l.internal, g.id, f, XA);
                 Log.i(Launcher.TAG, "save of " + g.id + (restoring ? " restored from " : " imported from ") + f.format + " " + f.label + " (" + f.files + " files)" + (kept ? "; the one before is in " + keep : ""));
-                done(restoring ? "Save restored" : "Save imported", g.name + " starts from it next time: pick Continue, or load it in the game." + (kept ? "\n\nThe save it had is kept: Earlier saves > Restore puts it back." : ""));
+                done(restoring ? Loc.t("Save restored", "存档已恢复") : Loc.t("Save imported", "存档已导入"), Loc.f("%s starts from it next time: pick Continue, or load it in the game.", "%s 下次从这份存档开始：在游戏里选「继续」，或读取它。", g.name)
+                    + (kept ? Loc.t("\n\nThe save it had is kept: Earlier saves > Restore puts it back.", "\n\n它原来那份存档已保留：「更早的存档 > 恢复」可以放回去。") : ""));
             } catch (IOException e) {
                 Log.w(Launcher.TAG, "install: " + e);
-                done("Import failed", "The save couldn't be swapped in (" + e.getMessage() + ")." + (kept ? " The one " + g.name + " had is kept: Earlier saves > Restore puts it back." : ""));
+                done(Loc.t("Import failed", "导入失败"), Loc.f("The save couldn't be swapped in (%s).", "存档换不进去（%s）。", e.getMessage())
+                    + (kept ? Loc.f(" The one %s had is kept: Earlier saves > Restore puts it back.", " %s 原来那份已保留：「更早的存档 > 恢复」可以放回去。", g.name) : ""));
             } finally { if (!restoring) cleanup(); }
         } });
     }
@@ -285,18 +290,18 @@ final class LauncherSaves {
     // ---------------- earlier saves ----------------
     void restoreAsk(final Launcher.Game g) {
         final List<Saves.Found> ks = Saves.kept(backups(), g.id);
-        if (ks.isEmpty()) { info("No earlier saves", "No saves of " + g.name + " are kept on this phone. An import keeps the save it replaces, and Back up saves on the games list keeps every game's."); return; }
-        whenClosed(g, "put a save back", new Runnable() { public void run() {
+        if (ks.isEmpty()) { info(Loc.t("No earlier saves", "没有更早的存档"), Loc.f("No saves of %s are kept on this phone. An import keeps the save it replaces, and Back up saves on the games list keeps every game's.", "这台手机上没留着 %s 的存档。导入会保留被它替换的那份，「备份存档」会保留每个游戏的。", g.name)); return; }
+        whenClosed(g, Loc.t("put a save back", "把存档放回去"), new Runnable() { public void run() {
             String[] items = new String[ks.size()];
             for (int i = 0; i < items.length; i++) items[i] = what(ks.get(i)) + "\n" + size(ks.get(i));
-            new AlertDialog.Builder(l, DIALOG).setTitle("Put back which save?")
+            new AlertDialog.Builder(l, DIALOG).setTitle(Loc.t("Put back which save?", "放回哪份存档？"))
                 .setItems(items, new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) {
                     final Saves.Found f = ks.get(w);
-                    new AlertDialog.Builder(l, DIALOG).setTitle("Put this save back?")
-                        .setMessage(what(f) + "\n" + size(f) + "\nIt holds: " + Saves.top(f.main(), 6) + "\n\n" + (hasSave(g.id) ? "The save " + g.name + " has now is kept first." : ""))
-                        .setPositiveButton("Put it back", new DialogInterface.OnClickListener() { public void onClick(DialogInterface d2, int w2) { install(g, f, true); } })
-                        .setNegativeButton("Cancel", null).show();
-                } }).setNegativeButton("Cancel", null).show();
+                    new AlertDialog.Builder(l, DIALOG).setTitle(Loc.t("Put this save back?", "放回这份存档吗？"))
+                        .setMessage(what(f) + "\n" + size(f) + Loc.t("\nIt holds: ", "\n内容：") + top(f.main(), 6) + "\n\n" + (hasSave(g.id) ? Loc.f("The save %s has now is kept first.", "%s 现在的存档会先保留。", g.name) : ""))
+                        .setPositiveButton(Loc.t("Put it back", "放回去"), new DialogInterface.OnClickListener() { public void onClick(DialogInterface d2, int w2) { install(g, f, true); } })
+                        .setNegativeButton(Loc.t("Cancel", "取消"), null).show();
+                } }).setNegativeButton(Loc.t("Cancel", "取消"), null).show();
         } });
     }
 
@@ -306,7 +311,7 @@ final class LauncherSaves {
         if (res != android.app.Activity.RESULT_OK || data == null || data.getData() == null) return true;
         Launcher.Game g = null; String id = l.app.getString(PREF, null);
         for (Launcher.Game x : l.scan()) if (x.id.equalsIgnoreCase(id)) g = x;
-        if (g == null) { l.toast("The game " + id + " is no longer on this phone"); return true; }
+        if (g == null) { l.toast(Loc.f("The game %s is no longer on this phone", "这台手机上已经没有游戏 %s 了", id)); return true; }
         if (req == EXPORT) exportTo(g, data.getData()); else staged(g, data.getData(), req == IMPORT_FOLDER);
         return true;
     }
@@ -315,21 +320,35 @@ final class LauncherSaves {
     static String what(Saves.Found f) {
         String w;
         switch (f.format) {
-            case "DroidPlay": w = "A DroidPlay export or backup"; break;
-            case "yuzu": w = "A yuzu-family emulator's save (yuzu, Citron, Eden, Sudachi…), " + f.label; break;
-            case "Ryujinx": w = "A Ryujinx save folder, " + f.label; break;
-            case "JKSV": w = "A JKSV backup, " + f.label; break;
-            case "EdiZon": w = "An EdiZon backup, " + f.label; break;
-            case "Checkpoint": w = "A Checkpoint backup, " + f.label; break;
-            case "kept": w = f.label.matches("\\d{8}-\\d{6}-.+") ? when(f.label) + ", kept when another save was put in" : f.label.matches("\\d{8}-\\d{6}") ? when(f.label) + ", from Back up saves" : f.label; break;
-            case "title": w = "A save folder named by its title ID"; break;
-            default: w = f.label.isEmpty() ? "A save, the zip's files" : "A save folder, " + f.label;
+            case "DroidPlay": w = Loc.t("A DroidPlay export or backup", "DroidPlay 导出的或备份的存档"); break;
+            case "yuzu": w = Loc.f("A yuzu-family emulator's save (yuzu, Citron, Eden, Sudachi…), %s", "yuzu 系模拟器的存档（yuzu、Citron、Eden、Sudachi……），%s", word(f.label)); break;
+            case "Ryujinx": w = Loc.f("A Ryujinx save folder, %s", "Ryujinx 的存档文件夹，%s", word(f.label)); break;
+            case "JKSV": w = Loc.f("A JKSV backup, %s", "JKSV 的备份，%s", word(f.label)); break;
+            case "EdiZon": w = Loc.f("An EdiZon backup, %s", "EdiZon 的备份，%s", word(f.label)); break;
+            case "Checkpoint": w = Loc.f("A Checkpoint backup, %s", "Checkpoint 的备份，%s", word(f.label)); break;
+            case "kept": w = f.label.matches("\\d{8}-\\d{6}-.+") ? when(f.label) + Loc.t(", kept when another save was put in", "，导入别的存档时留下的") : f.label.matches("\\d{8}-\\d{6}") ? when(f.label) + Loc.t(", from Back up saves", "，「备份存档」留下的") : f.label; break;
+            case "title": w = Loc.t("A save folder named by its title ID", "以标题 ID 命名的存档文件夹"); break;
+            default: w = f.label.isEmpty() ? Loc.t("A save, the zip's files", "一份存档，zip 里的文件") : Loc.f("A save folder, %s", "存档文件夹，%s", word(f.label));
         }
-        return f.device != null && f.account == null && !f.format.equals("kept") ? w + " (device save)" : w;
+        return f.device != null && f.account == null && !f.format.equals("kept") ? w + Loc.t(" (device save)", "（设备存档）") : w;
+    }
+    // Saves.label 的英文（"device save" / "user <ID>"）在界面上的中文：Saves.java 本身与语言无关（它被 JVM 测试直接调用）
+    static String word(String label) {
+        if (label == null || label.isEmpty()) return label;
+        if (label.equals("device save")) return Loc.t("device save", "设备存档");
+        if (label.startsWith("user ")) return Loc.f("user %s", "用户 %s", label.substring(5));
+        return label;
+    }
+    // Saves.top 的「还有 N 项」在界面上的中文
+    static String top(File save, int max) {
+        String t = Saves.top(save, max);
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(" and (\\d+) more$").matcher(t);
+        return m.find() ? t.substring(0, m.start()) + Loc.f(" and %d more", " 等 %d 项", Integer.parseInt(m.group(1))) : t;
     }
     static String size(Saves.Found f) {
-        return String.format(Locale.ROOT, "%d %s, %s", f.files, f.files == 1 ? "file" : "files", f.bytes < (1 << 20) ? (f.bytes + 1023) / 1024 + " KB" : String.format(Locale.ROOT, "%.1f MB", f.bytes / 1048576.0))
-            + (f.newest > 0 ? ", last changed " + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(new Date(f.newest)) : "");
+        String bytes = f.bytes < (1 << 20) ? (f.bytes + 1023) / 1024 + " KB" : String.format(Locale.ROOT, "%.1f MB", f.bytes / 1048576.0);
+        String count = Loc.zh() ? f.files + " 个文件，" + bytes : String.format(Locale.ROOT, "%d %s, %s", f.files, f.files == 1 ? "file" : "files", bytes);
+        return count + (f.newest > 0 ? Loc.f(", last changed %s", "，最后修改 %s", DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(new Date(f.newest))) : "");
     }
     static String when(String folder) {   // a backup folder's name, yyyyMMdd-HHmmss[-<title ID>], as a date
         try { return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).parse(folder.substring(0, Math.min(15, folder.length())))); }
@@ -356,7 +375,7 @@ final class LauncherSaves {
         progress = new AlertDialog.Builder(l, DIALOG).setMessage(what).setCancelable(false).show();
         new Thread(new Runnable() { public void run() {
             try { bg.run(); }
-            catch (RuntimeException e) { Log.w(Launcher.TAG, "saves: " + e); done("Something went wrong", String.valueOf(e)); }   // the dialog never left up
+            catch (RuntimeException e) { Log.w(Launcher.TAG, "saves: " + e); done(Loc.t("Something went wrong", "出错了"), String.valueOf(e)); }   // the dialog never left up
         } }, "saves").start();
     }
     void say(final String s) { l.runOnUiThread(new Runnable() { public void run() { if (progress != null) progress.setMessage(s); } }); }
@@ -367,5 +386,5 @@ final class LauncherSaves {
         } });
     }
     void done(final String title, final String msg) { then(new Runnable() { public void run() { info(title, msg); } }); }
-    void info(String title, String msg) { new AlertDialog.Builder(l, DIALOG).setTitle(title).setMessage(msg).setPositiveButton("OK", null).show(); }
+    void info(String title, String msg) { new AlertDialog.Builder(l, DIALOG).setTitle(title).setMessage(msg).setPositiveButton(Loc.t("OK", "确定"), null).show(); }
 }

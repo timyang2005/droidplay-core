@@ -67,9 +67,9 @@ public class Launcher extends Activity {
     static final String GAME_PROCESS = "org.nxnative.android:game";
 
     // nacp.py LANGUAGES: one bit of SupportedLanguageFlag (0x302C) per language, in this order
-    static final String[][] LANGUAGES = {{"en-US", "American English"}, {"en-GB", "British English"}, {"ja", "Japanese"}, {"fr", "French"}, {"de", "German"},
-        {"es-419", "Latin American Spanish"}, {"es", "Spanish"}, {"it", "Italian"}, {"nl", "Dutch"}, {"fr-CA", "Canadian French"}, {"pt", "Portuguese"}, {"ru", "Russian"},
-        {"ko", "Korean"}, {"zh-Hant", "Traditional Chinese"}, {"zh-Hans", "Simplified Chinese"}, {"pt-BR", "Brazilian Portuguese"}};
+    static final String[][] LANGUAGES = {{"en-US", Loc.t("American English", "美式英语")}, {"en-GB", Loc.t("British English", "英式英语")}, {"ja", Loc.t("Japanese", "日语")}, {"fr", Loc.t("French", "法语")}, {"de", Loc.t("German", "德语")},
+        {"es-419", Loc.t("Latin American Spanish", "拉美西班牙语")}, {"es", Loc.t("Spanish", "西班牙语")}, {"it", Loc.t("Italian", "意大利语")}, {"nl", Loc.t("Dutch", "荷兰语")}, {"fr-CA", Loc.t("Canadian French", "加拿大法语")}, {"pt", Loc.t("Portuguese", "葡萄牙语")}, {"ru", Loc.t("Russian", "俄语")},
+        {"ko", Loc.t("Korean", "韩语")}, {"zh-Hant", Loc.t("Traditional Chinese", "繁体中文")}, {"zh-Hans", Loc.t("Simplified Chinese", "简体中文")}, {"pt-BR", Loc.t("Brazilian Portuguese", "巴西葡萄牙语")}};
 
     // A setting: an environment variable the host reads (dm/games/settings.tsv's columns; only those the Android host honours)
     static final class Setting {
@@ -109,7 +109,7 @@ public class Launcher extends Activity {
     void opened(Intent i) {
         String id = i != null ? i.getStringExtra("game") : null; if (id == null) return;
         for (Game g : scan()) if (g.id.equalsIgnoreCase(id) && g.hosted) { showSettings(g); if (i.getBooleanExtra("play", false)) play(true); return; }
-        toast("The game " + id + " is not on this phone, or this app has no host for it");
+        toast(Loc.f("The game %s is not on this phone, or this app has no host for it", "这台手机上找不到游戏 %s，或者本应用没有它的 host", id));
     }
 
     @Override protected void onResume() { super.onResume(); saves.incoming(); }   // a save the computer sent (LauncherSaves.incoming)
@@ -148,26 +148,26 @@ public class Launcher extends Activity {
         bar.addView(word, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         final String running = runningGame();
         if (running != null) {
-            TextView r = pill("Resume " + nameOf(running), LIFT, TEXT); r.setCompoundDrawablesRelative(dot(READY), null, null, null); r.setCompoundDrawablePadding(px(8)); r.setPadding(px(12), 0, px(16), 0);
+            TextView r = pill(Loc.f("Resume %s", "继续 %s", nameOf(running)), LIFT, TEXT); r.setCompoundDrawablesRelative(dot(READY), null, null, null); r.setCompoundDrawablePadding(px(8)); r.setPadding(px(12), 0, px(16), 0);
             r.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { resume(); } });
             bar.addView(r, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, px(36)));
         }
-        TextView bk = pill("Back up saves", 0, TEXT2);
-        bk.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { String w = backup(); toast(w != null ? "Saves backed up to " + w : "Nothing to back up"); } });
+        TextView bk = pill(Loc.t("Back up saves", "备份存档"), 0, TEXT2);
+        bk.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { String w = backup(); toast(w != null ? Loc.f("Saves backed up to %s", "存档已备份到 %s", w) : Loc.t("Nothing to back up", "没有可备份的存档")); } });
         bar.addView(bk, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, px(36)));
         root.addView(bar);
         List<Game> gs = scan();
         if (gs.isEmpty()) {
             LinearLayout empty = new LinearLayout(this); empty.setOrientation(LinearLayout.VERTICAL); empty.setGravity(Gravity.CENTER_VERTICAL);
-            TextView h = text("No games on this phone yet", 22, TEXT, 700); h.setLetterSpacing(-0.02f); empty.addView(h);
-            TextView t = text("Pack one on your computer with DroidPlay: it copies the game here and updates this app.", 14, TEXT2, 400);
+            TextView h = text(Loc.t("No games on this phone yet", "这台手机上还没有游戏"), 22, TEXT, 700); h.setLetterSpacing(-0.02f); empty.addView(h);
+            TextView t = text(Loc.t("Pack one on your computer with DroidPlay: it copies the game here and updates this app.", "在电脑上用 DroidPlay 打包一个：它会把游戏复制到这里，并更新本应用。"), 14, TEXT2, 400);
             t.setPadding(0, px(8), 0, px(20)); t.setLineSpacing(0, 1.3f); t.setMaxWidth(px(440)); empty.addView(t);
-            TextView st = pill("Run the self test", LIFT, TEXT);
+            TextView st = pill(Loc.t("Run the self test", "运行自检"), LIFT, TEXT);
             st.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { selftest(); } });
             empty.addView(st, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, px(44)));
             root.addView(empty, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
         } else {
-            TextView label = caps("On this phone · " + gs.size() + (gs.size() == 1 ? " game" : " games")); label.setPadding(0, px(22), 0, px(22)); root.addView(label);
+            TextView label = caps(Loc.zh() ? "本机 · " + gs.size() + " 个游戏" : "On this phone · " + gs.size() + (gs.size() == 1 ? " game" : " games")); label.setPadding(0, px(22), 0, px(22)); root.addView(label);
             int cover = Math.max(120, Math.min(220, dpH - 214));   // as large as the screen's height leaves
             HorizontalScrollView hs = new HorizontalScrollView(this); hs.setHorizontalScrollBarEnabled(false); hs.setClipToPadding(false);
             LinearLayout row = new LinearLayout(this);
@@ -186,11 +186,11 @@ public class Launcher extends Activity {
         if (!g.hosted) t.getChildAt(0).setAlpha(0.45f);
         TextView n = text(g.name, 15, g.hosted ? TEXT : TEXT2, 500); n.setMaxLines(2); n.setEllipsize(android.text.TextUtils.TruncateAt.END); n.setPadding(0, px(12), 0, px(3));
         t.addView(n);
-        String sub = g.hosted ? (g.version != null ? g.version + " · " : "") + String.format(Locale.ROOT, "%.1f GB", g.bytes / 1073741824.0) : "Update the app from your computer";
+        String sub = g.hosted ? (g.version != null ? g.version + " · " : "") + String.format(Locale.ROOT, "%.1f GB", g.bytes / 1073741824.0) : Loc.t("Update the app from your computer", "从电脑上更新应用");
         TextView s = text(sub, 12, g.hosted ? TEXT2 : BUILD, 400); s.setFontFeatureSettings("tnum"); t.addView(s);
         press(t);
         t.setOnClickListener(new View.OnClickListener() { public void onClick(View v) {
-            if (!g.hosted) { toast(g.name + ": this app has no host for it yet (libdmhost_" + g.id + ".so). Update the app from the computer."); return; }
+            if (!g.hosted) { toast(Loc.f("%s: this app has no host for it yet (libdmhost_%s.so). Update the app from the computer.", "%s：本应用还没有它的 host（libdmhost_%s.so）。请从电脑上更新应用。", g.name, g.id)); return; }
             showSettings(g); } });
         return t;
     }
@@ -208,48 +208,48 @@ public class Launcher extends Activity {
     }
 
     void define(byte[] nacp) {
-        Setting s = new Setting("DM_OPMODE", "choice", "Game", "Console mode", "Docked renders at the TV resolution: sharper, slower on a phone.");
-        s.values = new String[] {"0", "1"}; s.labels = new String[] {"Handheld", "Docked"}; s.def = "0"; settings.add(s);
+        Setting s = new Setting("DM_OPMODE", "choice", Loc.t("Game", "游戏"), Loc.t("Console mode", "主机模式"), Loc.t("Docked renders at the TV resolution: sharper, slower on a phone.", "主机模式按电视的分辨率渲染：更清晰，但在手机上更慢。"));
+        s.values = new String[] {"0", "1"}; s.labels = new String[] {Loc.t("Handheld", "掌机模式"), Loc.t("Docked", "主机模式")}; s.def = "0"; settings.add(s);
         List<String[]> langs = new ArrayList<>();
         int flags = nacp != null && nacp.length >= 0x3030 ? (nacp[0x302C] & 0xFF) | (nacp[0x302D] & 0xFF) << 8 | (nacp[0x302E] & 0xFF) << 16 | (nacp[0x302F] & 0xFF) << 24 : 0;
         for (int i = 0; i < LANGUAGES.length; i++) if ((flags >> i & 1) != 0) langs.add(LANGUAGES[i]);
         if (langs.size() > 1) {
-            s = new Setting("DM_LANG", "choice", "Game", "Game language", null);
+            s = new Setting("DM_LANG", "choice", Loc.t("Game", "游戏"), Loc.t("Game language", "游戏语言"), null);
             s.values = new String[langs.size()]; s.labels = new String[langs.size()];
             for (int i = 0; i < langs.size(); i++) { s.values[i] = langs.get(i)[0]; s.labels[i] = langs.get(i)[1]; }
             s.def = defaults.containsKey("DM_LANG") ? defaults.get("DM_LANG") : (flags & 1) != 0 ? "en-US" : s.values[0]; settings.add(s);
         }
         byte[] fx = readAll(new File(game.dir, "code/main.fixups.tsv"));   // the rewriter marks a build with a render-scale stub (patch_nso.py RENDER_SCALE)
         if (fx != null && new String(fx, StandardCharsets.UTF_8).contains("# RENDER_SCALE	1")) {
-            s = new Setting("DM_RENDER_SCALE", "range", "Game", "Render scale", "Lower draws the 3D scene at fewer pixels: faster, softer picture.");
+            s = new Setting("DM_RENDER_SCALE", "range", Loc.t("Game", "游戏"), Loc.t("Render scale", "渲染缩放"), Loc.t("Lower draws the 3D scene at fewer pixels: faster, softer picture.", "调低时 3D 场景按更少的像素绘制：更快，画面更糊。"));
             s.lo = 0.5f; s.hi = 1.0f; s.step = 0.05f; s.def = "1.0"; settings.add(s);
         }
-        s = new Setting("DM_AUDIO_PACE", "choice", "Game", "Game timing",
-            "Game time keeps levels timed to the music in step with the picture when the phone runs the game below its frame rate; the music can stutter.");
-        s.values = new String[] {"real", "game"}; s.labels = new String[] {"Real time", "Game time"}; s.def = "real"; settings.add(s);
-        s = new Setting("DM_SHOW_FPS", "toggle", "Game", "Frame-rate counter", null); s.def = "0"; settings.add(s);
+        s = new Setting("DM_AUDIO_PACE", "choice", Loc.t("Game", "游戏"), Loc.t("Game timing", "计时方式"),
+            Loc.t("Game time keeps levels timed to the music in step with the picture when the phone runs the game below its frame rate; the music can stutter.", "手机跑不满帧率时，游戏时间会让按音乐计时的关卡跟画面对得上；音乐可能卡顿。"));
+        s.values = new String[] {"real", "game"}; s.labels = new String[] {Loc.t("Real time", "实时"), Loc.t("Game time", "游戏时间")}; s.def = "real"; settings.add(s);
+        s = new Setting("DM_SHOW_FPS", "toggle", Loc.t("Game", "游戏"), Loc.t("Frame-rate counter", "帧率计数器"), null); s.def = "0"; settings.add(s);
         if (defaults.containsKey("DM_VK_MESH_LEAVE_OUT")) {   // a game whose profile names plants the host can leave out (its android_defaults.txt carries the key; gfx_vk_mesh.inc): Ocarina of Time's forest
-            s = new Setting("DM_VK_MESH_LEAVE_OUT", "toggle", "Game", "Fewer plants (faster)",
-                "Leaves out the ferns, flowers and the trees' canopies: about 3 ms of GPU time a frame (a OnePlus Pad 3 went from 29.1 to 30.0 fps in Kokiri Forest). The trees stand bare.");
+            s = new Setting("DM_VK_MESH_LEAVE_OUT", "toggle", Loc.t("Game", "游戏"), Loc.t("Fewer plants (faster)", "少画些植被（更快）"),
+                Loc.t("Leaves out the ferns, flowers and the trees' canopies: about 3 ms of GPU time a frame (a OnePlus Pad 3 went from 29.1 to 30.0 fps in Kokiri Forest). The trees stand bare.", "不画蕨类、花和树冠：每帧省约 3 毫秒 GPU 时间（一台 OnePlus Pad 3 在科吉里森林从 29.1 fps 升到 30.0 fps）。树会变得光秃秃的。"));
             s.def = "0"; settings.add(s);
         }
         if (kgsl()) {   // any game, on a phone whose GPU clock the host can hold up (gfx_vk_floor.inc); on, the highest clock, as Ocarina of Time's Galaxy Z Fold 8 runs used
-            s = new Setting("DM_VK_GPU_FLOOR", "toggle", "Game", "Keep the GPU clock up",
-                "Holds the GPU at its highest clock: faster in some games on some phones, no faster on others, and slower on a warm phone, which then limits its GPU harder. The phone runs warmer and uses more battery.");
+            s = new Setting("DM_VK_GPU_FLOOR", "toggle", Loc.t("Game", "游戏"), Loc.t("Keep the GPU clock up", "让 GPU 保持高频"),
+                Loc.t("Holds the GPU at its highest clock: faster in some games on some phones, no faster on others, and slower on a warm phone, which then limits its GPU harder. The phone runs warmer and uses more battery.", "把 GPU 顶在最高频率：在某些手机上某些游戏更快，另一些没有变化，手机发烫之后反而更慢（那时它对 GPU 限得更狠）。手机会更热、更费电。"));
             s.on = "100"; s.def = "0"; settings.add(s);
         }
-        s = new Setting("DM_PAD_ABXY", "choice", "Controls", "Controller face buttons",
-            "By label for a controller that already gives its buttons Nintendo's letters (a Retroid in its Retro layout); by position for an Xbox-style controller.");
-        s.values = new String[] {"position", "label"}; s.labels = new String[] {"By position", "By label"}; s.def = "position"; settings.add(s);   // front_android.c face_button
-        s = new Setting("DM_RUMBLE", "toggle", "Controls", "Game rumble", null); s.def = "1"; settings.add(s);
-        s = new Setting("DM_RUMBLE_GAIN", "range", "Controls", "Rumble strength", null); s.lo = 0; s.hi = 3; s.step = 0.1f; s.def = "1.0"; settings.add(s);
+        s = new Setting("DM_PAD_ABXY", "choice", Loc.t("Controls", "操作"), Loc.t("Controller face buttons", "手柄 ABXY 键位"),
+            Loc.t("By label for a controller that already gives its buttons Nintendo's letters (a Retroid in its Retro layout); by position for an Xbox-style controller.", "按键印着任天堂字母的手柄按字母对应（Retroid 用 Retro 布局时）；Xbox 布局的手柄按位置对应。"));
+        s.values = new String[] {"position", "label"}; s.labels = new String[] {Loc.t("By position", "按位置"), Loc.t("By label", "按字母")}; s.def = "position"; settings.add(s);   // front_android.c face_button
+        s = new Setting("DM_RUMBLE", "toggle", Loc.t("Controls", "操作"), Loc.t("Game rumble", "游戏震动"), null); s.def = "1"; settings.add(s);
+        s = new Setting("DM_RUMBLE_GAIN", "range", Loc.t("Controls", "操作"), Loc.t("Rumble strength", "震动强度"), null); s.lo = 0; s.hi = 3; s.step = 0.1f; s.def = "1.0"; settings.add(s);
         // the touch controls' size and how far in from the sides they sit (Gamepad.java padScale, insetPx, raisePx)
-        s = new Setting("DM_PAD_SCALE", "range", "Controls", "Touch control size", "Stops growing where the controls would meet."); s.lo = 0.6f; s.hi = 1.4f; s.step = 0.05f; s.def = "1.0"; settings.add(s);
-        s = new Setting("DM_PAD_INSET", "range", "Controls", "Touch control inset",
-            "Moves the stick, the D-pad and the buttons in from the sides. 0% is the standard layout, 100% brings them together in the middle.");
+        s = new Setting("DM_PAD_SCALE", "range", Loc.t("Controls", "操作"), Loc.t("Touch control size", "触屏控件大小"), Loc.t("Stops growing where the controls would meet.", "长到控件彼此相接就不再变大。")); s.lo = 0.6f; s.hi = 1.4f; s.step = 0.05f; s.def = "1.0"; settings.add(s);
+        s = new Setting("DM_PAD_INSET", "range", Loc.t("Controls", "操作"), Loc.t("Touch control inset", "触屏控件左右内缩"),
+            Loc.t("Moves the stick, the D-pad and the buttons in from the sides. 0% is the standard layout, 100% brings them together in the middle.", "把摇杆、十字键和按键从两侧往中间收。0% 是标准布局，100% 时它们会在屏幕中间碰在一起。"));
         s.lo = 0; s.hi = 1; s.step = 0.05f; s.def = "0"; settings.add(s);
-        s = new Setting("DM_PAD_RAISE", "range", "Controls", "Touch control height",
-            "Moves the stick, the D-pad and the buttons up from the bottom. 0% is the standard layout; 100% stops just below the shoulder buttons.");
+        s = new Setting("DM_PAD_RAISE", "range", Loc.t("Controls", "操作"), Loc.t("Touch control height", "触屏控件高度"),
+            Loc.t("Moves the stick, the D-pad and the buttons up from the bottom. 0% is the standard layout; 100% stops just below the shoulder buttons.", "把摇杆、十字键和按键从底部往上抬。0% 是标准布局；100% 抬到肩键正下方为止。"));
         s.lo = 0; s.hi = 1; s.step = 0.05f; s.def = "0"; settings.add(s);
         for (Setting t : settings) if (defaults.containsKey(t.key)) t.def = defaults.get(t.key);
     }
@@ -277,11 +277,11 @@ public class Launcher extends Activity {
         left.addView(art(g, 20), new LinearLayout.LayoutParams(px(112), px(112)));
         TextView name = text(g.name, 26, TEXT, 700); name.setLetterSpacing(-0.02f); name.setLineSpacing(0, 1.05f); name.setPadding(0, px(16), 0, px(6)); left.addView(name);
         TextView meta = text((g.version != null ? g.version + " · " : "") + String.format(Locale.ROOT, "%.1f GB", g.bytes / 1073741824.0), 12, TEXT2, 400); meta.setFontFeatureSettings("tnum"); left.addView(meta);
-        TextView play = pill("Play", CREAM, INK); play.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16); play.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        TextView play = pill(Loc.t("Play", "开始游戏"), CREAM, INK); play.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16); play.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
         play.setCompoundDrawablesRelative(glyph(new float[] {4.5f, 2.5f, 13, 8, 4.5f, 13.5f}, INK, true), null, null, null); play.setCompoundDrawablePadding(px(10));
         play.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { play(); } }); press(play);
         LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(-1, px(52)); plp.topMargin = px(16); left.addView(play, plp);
-        TextView back = text("All games", 13, TEXT2, 500); back.setGravity(Gravity.CENTER_VERTICAL);
+        TextView back = text(Loc.t("All games", "全部游戏"), 13, TEXT2, 500); back.setGravity(Gravity.CENTER_VERTICAL);
         back.setCompoundDrawablesRelative(glyph(new float[] {10, 3, 5, 8, 10, 13}, TEXT2, false), null, null, null); back.setCompoundDrawablePadding(px(6));
         back.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { showGames(); } });
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, px(44)); blp.topMargin = px(4); left.addView(back, blp);
@@ -302,7 +302,7 @@ public class Launcher extends Activity {
             if (!s.section.equals(section)) { section = s.section; TextView h = caps(section); h.setPadding(0, list.getChildCount() == 0 ? px(4) : px(18), 0, px(6)); list.addView(h); }
             list.addView(row(s));
         }
-        TextView reset = text("Reset to tested defaults", 13, TEXT2, 500); reset.setGravity(Gravity.CENTER_VERTICAL);
+        TextView reset = text(Loc.t("Reset to tested defaults", "恢复为测试过的默认值"), 13, TEXT2, 500); reset.setGravity(Gravity.CENTER_VERTICAL);
         reset.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { prefs.edit().clear().apply(); for (Setting s : settings) chosen.put(s.key, s.def); fill(); } });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, px(44)); lp.topMargin = px(12);
         list.addView(reset, lp);
@@ -314,7 +314,7 @@ public class Launcher extends Activity {
         LinearLayout r = new LinearLayout(this); r.setGravity(Gravity.CENTER_VERTICAL); r.setMinimumHeight(px(48)); r.setPadding(0, px(6), 0, px(6));
         LinearLayout words = new LinearLayout(this); words.setOrientation(LinearLayout.VERTICAL);
         words.addView(text(s.label, 14, TEXT, 400));
-        String note = fixed ? "Set in env.txt: " + s.key + "=" + cur : s.note;
+        String note = fixed ? Loc.f("Set in env.txt: %s=%s", "已在 env.txt 中设置：%s=%s", s.key, cur) : s.note;
         if (note != null) { TextView t = text(note, 11, TEXT2, 400); t.setPadding(0, px(2), px(12), 0); t.setLineSpacing(0, 1.2f); words.addView(t); }
         r.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         View ctl;
@@ -372,7 +372,7 @@ public class Launcher extends Activity {
     // desktop: the desktop app's Play started it (it said the first start takes a while before it did), so a first start gets a toast here, not a dialog to tap
     void play(final boolean desktop) {
         final Game g = game;
-        if (saves.busy) { toast("Wait for the save to finish copying, then press Play"); return; }
+        if (saves.busy) { toast(Loc.t("Wait for the save to finish copying, then press Play", "等存档复制完，再按「开始游戏」")); return; }
         StringBuilder sb = new StringBuilder("# written by the settings screen (Launcher.java); env.txt wins over these\n");
         for (Setting s : settings) if (!envFile.containsKey(s.key)) sb.append(s.key).append('=').append(chosen.get(s.key)).append('\n');
         try (FileOutputStream o = new FileOutputStream(new File(g.dir, "launcher.txt"))) { o.write(sb.toString().getBytes(StandardCharsets.UTF_8)); } catch (IOException e) { Log.w(TAG, "launcher.txt: " + e); }
@@ -380,20 +380,20 @@ public class Launcher extends Activity {
         if (running != null && running.equals(g.id)) { resume(); return; }
         Runnable go = new Runnable() { public void run() {
             if (running == null) { start(g.id, false); return; }
-            new AlertDialog.Builder(Launcher.this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("Switch games?")
-                .setMessage("Another game is running. Starting " + g.name + " closes it: progress it has not saved is lost.")
-                .setPositiveButton("Close it and start", new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { endGame(); later(g.id, false); } })
-                .setNegativeButton("Cancel", null).show();
+            new AlertDialog.Builder(Launcher.this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle(Loc.t("Switch games?", "切换游戏？"))
+                .setMessage(Loc.f("Another game is running. Starting %s closes it: progress it has not saved is lost.", "另一个游戏正在运行。启动 %s 会关掉它，它没保存的进度会丢失。", g.name))
+                .setPositiveButton(Loc.t("Close it and start", "关掉它并启动"), new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { endGame(); later(g.id, false); } })
+                .setNegativeButton(Loc.t("Cancel", "取消"), null).show();
         } };
         if (!firstStart(g.id)) { go.run(); return; }
         // A first start stays on the loading screen while the driver builds the game's pipelines: 80 seconds for Brilliant Diamond on a Galaxy S25 Edge (2,978
         // pipelines and 8,844 shader libraries), 39 on a OnePlus Pad 3, a few seconds the next time. A player who isn't told takes it for a crash
         Log.i(TAG, "launcher: first start of " + g.id + " (no pipeline cache)");
-        if (desktop) { toast(g.name + " prepares its shaders for its first start: it stays on the loading screen for a minute or two"); go.run(); return; }
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("The first start takes a minute or two")
-            .setMessage(g.name + " prepares its shaders first, and stays on the loading screen meanwhile. The phone may get warm. Later starts take a few seconds.")
-            .setPositiveButton("Start", new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { go.run(); } })
-            .setNegativeButton("Cancel", null).show();
+        if (desktop) { toast(Loc.f("%s prepares its shaders for its first start: it stays on the loading screen for a minute or two", "%s 首次启动要先准备着色器：它会停在加载画面一两分钟", g.name)); go.run(); return; }
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle(Loc.t("The first start takes a minute or two", "首次启动要一两分钟"))
+            .setMessage(Loc.f("%s prepares its shaders first, and stays on the loading screen meanwhile. The phone may get warm. Later starts take a few seconds.", "%s 会先准备着色器，这期间停在加载画面。手机可能会发热；之后再启动只要几秒。", g.name))
+            .setPositiveButton(Loc.t("Start", "启动"), new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { go.run(); } })
+            .setNegativeButton(Loc.t("Cancel", "取消"), null).show();
     }
     // No driver pipeline cache of the game's in internal storage: cache/<id>/pipeline.cache, where front_android.c points DM_PIPELINE_CACHE, or with a custom Vulkan
     // driver's name after it (gfx_vk_draw.inc). pipeline.cache.keys4 beside it is the list of pipelines to make again, which a start without the driver's cache
@@ -404,7 +404,7 @@ public class Launcher extends Activity {
         return true;
     }
     void selftest() {
-        List<String> hosts = hosts(); if (hosts.isEmpty()) { toast("This app carries no game host"); return; }
+        List<String> hosts = hosts(); if (hosts.isEmpty()) { toast(Loc.t("This app carries no game host", "本应用没有带任何游戏的 host")); return; }
         if (runningGame() != null) endGame();
         later(hosts.get(0), true);
     }
@@ -454,8 +454,8 @@ public class Launcher extends Activity {
         try {
             for (File f : src) copyTree(f, new File(to, f.getName()), xa, f.getName());
             writeText(new File(to, "xattrs.tsv"), xa.toString());
-            writeText(new File(to, "README.txt"), "DroidPlay save backup: the app's internal save folders as they were. Copy this folder to backups/restore/ on the phone to put them back.\n");
-        } catch (IOException e) { Log.w(TAG, "backup: " + e); toast("Backup failed: " + e.getMessage()); return null; }
+            writeText(new File(to, "README.txt"), Loc.t("DroidPlay save backup: the app's internal save folders as they were. Copy this folder to backups/restore/ on the phone to put them back.\n", "DroidPlay 存档备份：应用内部存档目录原样的一份。把这个文件夹复制到手机上的 backups/restore/ 就能放回去。\n"));
+        } catch (IOException e) { Log.w(TAG, "backup: " + e); toast(Loc.f("Backup failed: %s", "备份失败：%s", e.getMessage())); return null; }
         Log.i(TAG, "saves backed up to " + to);
         return to.getPath();
     }
@@ -463,7 +463,7 @@ public class Launcher extends Activity {
     // saves/ goes back a game at a time, so a game the backup has no save of keeps its own (a one-game backup from an import or an export holds saves/<title ID> alone)
     String restore() {
         File r = new File(ext, "backups/restore"); if (!r.isDirectory()) return null;
-        if (gameProcess() != null) return "A game is running: the backup in backups/restore is restored at the next start";
+        if (gameProcess() != null) return Loc.t("A game is running: the backup in backups/restore is restored at the next start", "游戏正在运行：backups/restore 里的备份会在下次启动时恢复");
         String before = backup();
         Map<String, String[]> xa = readXattrs(new File(r, "xattrs.tsv"));
         File[] fs = r.listFiles(); if (fs == null) return null;
@@ -474,9 +474,9 @@ public class Launcher extends Activity {
                 File[] gs = f.listFiles(); if (gs != null) for (File g : gs)
                     if (g.isDirectory() && Saves.TITLE.matcher(g.getName()).matches()) restoreTree(g, new File(internal, "saves/" + g.getName()), "saves/" + g.getName(), xa);
             }
-        } catch (IOException e) { Log.w(TAG, "restore: " + e); return "Restore failed: " + e.getMessage(); }
+        } catch (IOException e) { Log.w(TAG, "restore: " + e); return Loc.f("Restore failed: %s", "恢复失败：%s", e.getMessage()); }
         r.renameTo(new File(ext, "backups/restored-" + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date())));
-        return "Saves restored" + (before != null ? " (the ones before are in " + before + ")" : "");
+        return Loc.t("Saves restored", "存档已恢复") + (before != null ? Loc.f(" (the ones before are in %s)", "（之前的存档在 %s）", before) : "");
     }
     static void restoreTree(File src, File dst, String top, Map<String, String[]> xa) throws IOException {
         File tmp = new File(dst.getPath() + ".restoring");
@@ -496,7 +496,7 @@ public class Launcher extends Activity {
             if (hasFiles(dev)) { mark.renameTo(new File(d, "legacy_save.done")); continue; }   // a device save there already: leave both as they are
             deleteTree(dst); deleteTree(dev);   // empty folders a start before the copy made
             String bk = backup();
-            if (bk == null) return "The save could not be backed up, so it was not moved yet: free some space and open the app again";
+            if (bk == null) return Loc.t("The save could not be backed up, so it was not moved yet: free some space and open the app again", "存档没能备份，所以还没有移动：腾出一些空间，再打开一次应用");
             try {
                 for (String n : new String[] {"save", "save_device"}) {
                     File s = new File(internal, n); if (!s.isDirectory()) continue;
@@ -508,10 +508,10 @@ public class Launcher extends Activity {
                 if (pc.isFile() && !pcd.exists()) { pcd.getParentFile().mkdirs(); copyFile(pc, pcd); }
                 SharedPreferences was = getSharedPreferences("launcher", MODE_PRIVATE), now = getSharedPreferences("launcher_" + id, MODE_PRIVATE);
                 if (now.getAll().isEmpty() && !was.getAll().isEmpty()) { SharedPreferences.Editor e = now.edit(); for (Map.Entry<String, ?> en : was.getAll().entrySet()) e.putString(en.getKey(), String.valueOf(en.getValue())); e.apply(); }
-            } catch (IOException e) { Log.w(TAG, "migrate: " + e); return "The save could not be copied (" + e.getMessage() + "): it is untouched in the old folder and in " + bk; }
+            } catch (IOException e) { Log.w(TAG, "migrate: " + e); return Loc.f("The save could not be copied (%s): it is untouched in the old folder and in %s", "存档没能复制（%s）：它在旧文件夹和 %s 里都原样未动", e.getMessage(), bk); }
             mark.renameTo(new File(d, "legacy_save.done"));
             Log.i(TAG, "save of the one-game install copied to saves/" + id + " (backup in " + bk + "; files/save left as it was)");
-            return "Your save was copied for " + title(readAll(new File(d, "control.nacp")), id) + " (a backup is in " + bk + ")";
+            return Loc.f("Your save was copied for %s (a backup is in %s)", "你的存档已复制给 %s（备份在 %s）", title(readAll(new File(d, "control.nacp")), id), bk);
         }
         return null;
     }
