@@ -533,7 +533,7 @@ class LibraryPage(QWidget):
         return True
     def game_app(self, g):   # the game as an app of its own (build_android_from_nsp.py --game-apk): no phone, and the launcher app on the phones is left as it is
         ex = (g.info.get('extracted') or {}).get(self.win.st.value(f'ver/{g.id}', '') or g.newest) or {}
-        rom = ex.get('romfs_bytes'); data = f'its {gb_text(rom)} of game data' if rom else L.t('its game data', '它的游戏数据')
+        rom = ex.get('romfs_bytes'); data = L.t(f'its {gb_text(rom)} of game data', f'它 {gb_text(rom)} 的游戏数据') if rom else L.t('its game data', '它的游戏数据')
         d = QDialog(self); d.setWindowTitle(L.t(f'Game app: {g.name}', f'游戏应用：{g.name}')); d.setStyleSheet(STYLE + f'QDialog {{ background: {PANEL}; }}'); d.setMinimumWidth(560)
         outer = QVBoxLayout(d); outer.setContentsMargins(0, 0, 0, 0); outer.setSpacing(0)
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); outer.addWidget(scroll, 1)
@@ -749,7 +749,7 @@ class BuildsPage(QWidget):
         it.setText(2, clock_text(time.time() - it.t0))
         detail = f'{it.name}' + (f' · {ev["step"]}' if ev.get('step') else '')
         if k == 'progress' and ev.get('total'): detail += (f' · {ev["note"]}' if ev.get('note') else '') + ' · ' + count_text(ev.get('done') or 0, ev['total'], ev.get('unit') or '')
-        if ev.get('eta'): detail += f' · {int(ev["eta"])}s left'
+        if ev.get('eta'): detail += L.t(f' · {int(ev["eta"])}s left', f' · 还剩 {int(ev["eta"])} 秒')
         if k == 'stage_end':
             bar.setRange(0, 1); bar.setValue(1); tint(bar, READY if ev.get('ok') else ERR); it.setText(0, f'{key}/{it.n}   {it.name}'); it.setToolTip(0, it.text(0))   # its last step was not still going on
             it.setText(2, clock_text(ev.get('elapsed', 0))); it.setText(3, ev.get('summary', '')); it.setToolTip(3, ev.get('summary', '')); it.setForeground(3, QColor(READY if ev.get('ok') else ERR))
@@ -827,7 +827,7 @@ class BuildsPage(QWidget):
     def ended(self, ok):   # what the bar says under "<build> — done" or "— failed", rather than the same word again
         if not ok: return L.t('see the messages on the Builds page', '去构建记录页看消息')
         n = len(self.items); took = clock_text(time.time() - self.t0)
-        return f'{n} stage{"" if n == 1 else "s"} in {took}' if n else L.t(f'took {took}', f'用时 {took}')
+        return L.t(f'{n} stage{"" if n == 1 else "s"} in {took}', f'{n} 个阶段，用时 {took}') if n else L.t(f'took {took}', f'用时 {took}')
     def stop(self):
         if self.ext:   # a console build: its process tree
             if QMessageBox.question(self, L.t('Stop', '停止'), L.t(f'Stop {self.title}, started from the console?', f'停止 {self.title}？它是从命令行启动的。')) != QMessageBox.Yes: return
