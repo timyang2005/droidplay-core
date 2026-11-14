@@ -79,13 +79,15 @@ def tools_step(rows, windows, run=None):
     if rows is None: return Step('tools', title, WORKING, L.t('Looking at what this PC has…', '正在查看这台电脑有什么…'))
     bad = [r for r in rows if not r['ok']]
     check = next((r for r in bad if r['name'] == 'check'), None)
-    if check: return Step('tools', title, PROBLEM, f"DroidPlay couldn't look at what this PC has: {esc(check['detail'])}", L.t('Look again', '再看一次'))
+    if check: return Step('tools', title, PROBLEM, L.t(f"DroidPlay couldn't look at what this PC has: {esc(check['detail'])}", f"DroidPlay 没能查看这台电脑上有什么：{esc(check['detail'])}"), L.t('Look again', '再看一次'))
     python = [r['name'].split()[-1] for r in bad if r['name'].startswith('Python')]
     parts = missing_parts(rows)
     if run and run[0] == 'failed' and parts:
-        return Step('tools', title, PROBLEM, f'Installing the tools stopped: {esc(run[1])}', L.t('Try again', '再试一次') if windows else '')
+        return Step('tools', title, PROBLEM, L.t(f'Installing the tools stopped: {esc(run[1])}', f'安装工具停住了：{esc(run[1])}'), L.t('Try again', '再试一次') if windows else '')
     if parts:
-        what = TOOLS_INTRO if len(parts) == len(PARTS) else f"{TOOLS_INTRO.split('. ')[0]}. Still to install: {', '.join(parts)}."
+        still = ', '.join(parts)
+        what = TOOLS_INTRO if len(parts) == len(PARTS) else (
+            L.t(f"{TOOLS_INTRO.split('. ')[0]}. Still to install: {still}.", f"{TOOLS_INTRO.split('。')[0]}。还差：{still}。"))
         return Step('tools', title, TODO, what if windows else L.t(f"{what} Settings says how to get each one.", f"{what} 设置页写着怎么获取每一个。"), L.t('Install tools…', '安装工具…') if windows else L.t('Open Settings', '打开设置'))
     if python:   # the app's own: Setup and uv run bring them, so only a Python picked by hand misses them
         return Step('tools', title, PROBLEM, L.t(f"The Python that runs DroidPlay doesn't have {esc(', '.join(python))}. Settings says how to get them.", f"运行 DroidPlay 的这个 Python 缺 {esc(', '.join(python))}。设置页写着怎么装它们。"), L.t('Open Settings', '打开设置'))
@@ -111,14 +113,14 @@ def phone_step(devs, adb, picked=None, seen=False):
     for d in devs:   # adb lists a phone that hasn't allowed this PC with no model or name: "Your phone" then
         name = esc(phone_name(d) or L.t('Your phone', '你的手机'))
         if d['state'] in ('unauthorized', 'authorizing'):
-            return Step('phone', title, WAITING, L.t(f'<b>{name}</b> is waiting: unlock it and tap <b>Allow</b> on "Allow USB debugging?"', f'<b>{name}</b> 在等着：解锁它，在「允许 USB 调试？」上点 <b>允许</b>'), 'Set up my phone…')
+            return Step('phone', title, WAITING, L.t(f'<b>{name}</b> is waiting: unlock it and tap <b>Allow</b> on "Allow USB debugging?"', f'<b>{name}</b> 在等着：解锁它，在「允许 USB 调试？」上点 <b>允许</b>'), L.t('Set up my phone…', '设置我的手机…'))
         if d['state'] == 'offline':
             return Step('phone', title, PROBLEM, L.t(f"<b>{name}</b> isn't answering over Wi-Fi: wake it, and check that Wireless debugging is still on.", f"<b>{name}</b> 在 Wi-Fi 上没应答：唤醒它，并确认无线调试还开着。") if wifi(d['serial'])
-                        else L.t(f"<b>{name}</b> isn't answering: unplug it and plug it back in.", f"<b>{name}</b> 没应答：把它拔下来再插回去。"), 'Set up my phone…')
+                        else L.t(f"<b>{name}</b> isn't answering: unplug it and plug it back in.", f"<b>{name}</b> 没应答：把它拔下来再插回去。"), L.t('Set up my phone…', '设置我的手机…'))
     if devs:   # Linux's "no permissions", a phone in recovery: adb's own word, as the Phones page shows it
         d = devs[0]; return Step('phone', title, PROBLEM, L.t(f'<b>{esc(phone_name(d) or "Your phone")}</b> is connected but not ready (adb says "{esc(d["state"])}").', f'<b>{esc(phone_name(d) or "你的手机")}</b> 已经连上但还没就绪（adb 说是「{esc(d["state"])}」）。'), L.t('Set up my phone…', '设置我的手机…'))
     if seen: return Step('phone', title, DONE, L.t("Your phone was set up before. It isn't plugged in now.", "你的手机之前设置过。现在没插着。"))
-    return Step('phone', title, TODO, PHONE_INTRO, 'Set up my phone…')
+    return Step('phone', title, TODO, PHONE_INTRO, L.t('Set up my phone…', '设置我的手机…'))
 
 
 PLAY_LABELS = {'build': L.t('Build and install', '构建并安装'), 'install': L.t('Install on phone', '安装到手机'), 'play': L.t('Play', '开始游戏')}
@@ -127,7 +129,7 @@ PLAY_LABELS = {'build': L.t('Build and install', '构建并安装'), 'install': 
 def game_step(folders, games, reading):
     """folders: the game folders added; games: what reading them gave, as dicts (folder, name, state as Game.status gives it, tested, error); reading: a read runs"""
     title = L.t('Your first game', '你的第一个游戏')
-    ok = [g for g in games if g['state'] not in ('keys', 'tools', 'none')]
+    ok = [g for g in games if g['state'] not in ('keys', 'tools', 'none', 'folder')]   # folder: the read found something to change in it
     if ok:
         g = ok[0]; label = PLAY_LABELS.get(g['state'], '')
         how = L.t('not supported yet', '还不支持') if g['state'] == 'survey' else L.t('played on Android', '已在安卓上玩过') if g.get('tested') else L.t('not played on Android yet', '还没在安卓上玩过')
@@ -141,7 +143,7 @@ def game_step(folders, games, reading):
         if g['state'] == 'keys': return Step('game', title, TODO, L.t(f'<b>{name}</b> is added. DroidPlay reads it once your keys are in (step 1).', f'<b>{name}</b> 已添加。密钥就位以后（第 1 步），DroidPlay 就会读取它。'))
         if g['state'] == 'tools': return Step('game', title, TODO, L.t(f'<b>{name}</b> is added. DroidPlay reads it once the tools are installed (step 2).', f'<b>{name}</b> 已添加。工具装好以后（第 2 步），DroidPlay 就会读取它。'))
         return Step('game', title, PROBLEM, L.t(f"DroidPlay couldn't read <b>{name}</b>: {esc(g.get('error') or L.t('no game in that folder', '那个文件夹里没有游戏'))}", f"DroidPlay 读不了 <b>{name}</b>：{esc(g.get('error') or '那个文件夹里没有游戏')}"), L.t('Add a game…', '添加游戏…'))
-    return Step('game', title, TODO, GAME_INTRO, 'Add a game…')
+    return Step('game', title, TODO, GAME_INTRO, L.t('Add a game…', '添加游戏…'))
 
 
 # ---- Install tools' one bar ----

@@ -33,6 +33,7 @@
 #include "spv_gmcache.h"   // raw global memory helpers keep their last entry's range and delta in private words (gfx_vk_draw.inc spv_fit_gmcache)
 #include "pk_guard.h"   // the start-up list's marker and skip list (gfx_vk_draw.inc pk_guard)
 #include "spv_pool.h"
+#include "spv_harr.h"   // descriptor arrays longer than stage_set writes shortened to it (gfx_vk_draw.inc spv_fit_harr)
 #include "spv_wide.h"
 #include "spv_e5.h"   // E5B9G9R9 storage images through R32_UINT views, RGB9E5 packed by the shader (vt_storage_up, gfx_vk_draw.inc cpipe_e5)
 #include "ds_texels.h"   // depth / stencil readbacks rebuilt in NVN's layouts (mtl_read_texels, copy_t2b)
@@ -47,6 +48,7 @@
 #include "wb_alias.h"   // a binding inside another binding's write-back of the same draw or dispatch (gfx_vk_draw.inc own_alias)
 #include "rec_desc.h"   // a descriptor set's writes packed for the recorder (gfx_vk_rec.inc R_UPDDS)
 #include "sb_reuse.h"   // a read-only storage buffer's copy bound again while its pages are unwritten (gfx_vk_sbcopy.inc)
+#include "apipe_rule.h"   // which draws are left out while their new pipeline builds in the background (gfx_vk_draw.inc apipe_ok)
 #include "wb_promote.h"   // whether a read of a draw's pending storage buffer write takes its copy on the GPU after a barrier (gfx_vk_draw.inc wb_promote)
 #include "tex_aspect.h"   // which aspect of its image a texture slot reads: stencil mode (gfx_vk_draw.inc tex_aspect)
 #include "rd_home.h"   // the home ranges of storage buffers draws under rasterizer discard write (gfx_vk_draw.inc rd_bind_w)
@@ -70,6 +72,7 @@ static int g_driver_id;   // VkPhysicalDeviceDriverProperties driverID, 0 when n
 static int g_qcom_driver;   // Qualcomm's own Vulkan driver, not another on an Adreno such as Turnip (VkPhysicalDeviceDriverProperties driverID; vk_init)
 static uint32_t g_sg_stages = VK_SHADER_STAGE_ALL;   // the stages that run subgroup operations (subgroupSupportedStages; spv_limits.h); all when not known
 static int g_layer_out = 1;   // vertex shaders may write the layer and viewport index: VK_EXT_shader_viewport_index_layer or Vulkan 1.2 (spv_layer.h)
+static int g_vs_layers;   // a vertex shader's layer reaches only layers below this (Arm's Mali driver: 8; gfx_vk_draw.inc vs_layer_groups), 0: all of them
 static uint32_t g_sg_size = 32;   // the subgroup size (subgroupSize): over 32, Maxwell's warps are 32-lane parts of a subgroup (spv_wide.h)
 static VkPhysicalDeviceFeatures g_vk_feat; static int g_divisor;   // what the device was created with; VK_EXT_vertex_attribute_divisor or the KHR one   // what the device was created with
 // The KHR divisor without supportsNonZeroFirstInstance (the Pixel 9 Pro XL's Mali-G715): a draw with a stream stepping per N > 1 instances must start at instance 0, so its
@@ -172,6 +175,9 @@ static int vk_try(char *why, size_t nwhy) {
     if ((g_fmt_list = has_ext(de, nd, "VK_KHR_image_format_list"))) dext[nde++] = "VK_KHR_image_format_list";
     // A 1.2 device's shaderOutputLayer isn't asked (the instance asks for 1.1); every 1.2 or later GPU here takes the translator's layer output as it is
     g_layer_out = has_ext(de, nd, "VK_EXT_shader_viewport_index_layer") || VK_API_VERSION_MAJOR(g_vk.props.apiVersion) > 1 || VK_API_VERSION_MINOR(g_vk.props.apiVersion) >= 2;
+    // Arm's Mali-G715 driver drops a primitive whose layer from a vertex shader is 8 or more (a geometry shader's reaches every layer): such draws into more layers are
+    // drawn once per 8 (vs_layer_groups). DM_VK_VS_LAYERS=<n> (env.txt): that limit on any GPU; 0: none, a draw made once as before
+    { const char *e = getenv("DM_VK_VS_LAYERS"); g_vs_layers = e ? atoi(e) : g_driver_id == VK_DRIVER_ID_ARM_PROPRIETARY ? 8 : 0; if (g_vs_layers < 0) g_vs_layers = 0; }
     int hqr = qr_host_env() && has_ext(de, nd, "VK_EXT_host_query_reset");   // the completion thread resets the queries a chunk used (Query resets below); core only from Vulkan 1.2
     int memreport = mr_want(de, nd);   // DM_VK_MEMREPORT (gfx_vk_memreport.inc)
     if (memreport) dext[nde++] = "VK_EXT_device_memory_report";
@@ -370,6 +376,7 @@ typedef struct chunk {
     VkDescriptorSet *bcd; int nbcd, cbcd, bcd_used;   // the GPU BC decodes' sets (gfx_vk_bcdec.inc bcd_set), the same way
     VkDescriptorSet *ups; int nups, cups, ups_used;   // the upscaler replacement's sets (gfx_vk_upsq.inc upsq_set), the same way
     uint64_t rq_ticket;   // its submission's ticket with the recorder on (gfx_vk_rec.inc rec_submit), 0 when submitted by the replay
+    VkResult sub_r;   // VK_SUCCESS once its fence is on the queue; else what the queue said, and the completion thread doesn't wait on the fence (submit_or_fence)
     ds_list **dl; int ndl, cdl; ds_list **dt; int ndt, cdt; int nds;   // recycled descriptor sets (gfx_vk_draw.inc ds_get): the lists holding sets, those handed out from in this recording, the sets held
     gm_logref *gml; int ngml, cgml, gm_st, ip_wr;   // its raw store write logs; gm_st: a shader with raw stores ran in it (gfx_vk_gmem.inc); ip_wr: one wrote a storage buffer in place
     struct { const char *a, *b; uint32_t n, m; char kind; } cr[CR_MAX]; int ncr;   // what it recorded, the last CR_MAX of ncr (crumb): named when the GPU hangs or is lost in it (gpu_slow)
@@ -692,13 +699,34 @@ static void gpu_fault_log(VkResult r) {   // once, from whichever thread sees th
         LOG("[vk]   vendor: \"%s\", code %#llx, data %#llx", vd[i].description, (unsigned long long)vd[i].vendorFaultCode, (unsigned long long)vd[i].vendorFaultData);
     bc_report("device lost", 0);
 }
+// A submission the queue refuses leaves its fence off the queue, and the completion thread waited on that fence for good: on an AYN Thor Pro (Adreno 740, Qualcomm's
+// driver) Skyrim's vkQueueSubmit gave -3, which isn't one of a submission's results, the replay stopped behind it and Android called the app not responding
+// (droidplay-core#444). The fence goes again alone, its work dropped, as a command buffer that didn't end does on the recorder. When the queue refuses that too, the GPU
+// counts as lost (gpu_fault_log: the start record, and the next start on the system's driver after a DM_VK_DRIVER one) and the chunk keeps the result, so the completion
+// thread doesn't wait on its fence. who: "" from the replay, " on the recorder". → VK_SUCCESS once the fence is on the queue, else the queue's result
+// DM_VK_REFUSE_SUBMIT=n (env.txt), to test this: the nth submission is refused with -3 as that one was, and its fence alone goes; -n refuses that too
+static int refuse_at(void) { static int v = -1; static int n; if (v < 0) { const char *e = getenv("DM_VK_REFUSE_SUBMIT"); n = e ? atoi(e) : 0; v = 1; } return n; }
+static VkResult submit_or_fence(VkCommandBuffer cb, VkFence f, const char *who) {
+    VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = cb ? 1u : 0u, .pCommandBuffers = &cb};
+    static long nsub; int ra = refuse_at();
+    pthread_mutex_lock(&g_vk.qmu);
+    long k = ++nsub; int refuse = ra && k == (ra < 0 ? -(long)ra : (long)ra);
+    VkResult r = refuse ? VK_ERROR_INITIALIZATION_FAILED : vkQueueSubmit(g_vk.q, 1, &si, f), alone = r;
+    if (r != VK_SUCCESS && r != VK_ERROR_DEVICE_LOST && cb) { si.commandBufferCount = 0; alone = refuse && ra < 0 ? r : vkQueueSubmit(g_vk.q, 1, &si, f); }
+    pthread_mutex_unlock(&g_vk.qmu);
+    if (r == VK_SUCCESS) return VK_SUCCESS;
+    if (alone == VK_SUCCESS) { RED_ONCE(166, "vkQueueSubmit failed%s: %d; its fence went alone, so the chunk completes with its work dropped", who, r); return VK_SUCCESS; }
+    RED_ONCE(2, "vkQueueSubmit failed%s: %d%s", who, r, alone != r || (cb && r != VK_ERROR_DEVICE_LOST) ? ", and its fence alone too: the GPU counts as lost" : "");
+    gpu_fault_log(alone);
+    return alone;
+}
 // the completion thread: c took ns on the GPU, its fence gave fr; cut: its end timestamp was never written (the driver's hang recovery skipped the rest of it)
 static void gpu_slow(chunk *c, VkResult fr, uint64_t ns, int cut) {
     if (fr != VK_SUCCESS) gpu_fault_log(fr);
     static int nrep; if (nrep >= 3) return;
     nrep++; bc_report("a slow submission", c->seq); int n = c->ncr < CR_MAX ? c->ncr : CR_MAX;
     LOG("[RED] [vk] submission %llu took %.0f ms on the GPU%s%s (the one before had completed): it recorded %d passes, draws and dispatches, the last %d of them:", (unsigned long long)c->seq, ns / 1e6,
-        cut ? ", its end timestamp never written (the driver's hang recovery cut it short)" : "", fr == VK_ERROR_DEVICE_LOST ? ", and its fence reports the device lost" : "", c->ncr, n);
+        cut ? ", its end timestamp never written (the driver's hang recovery cut it short)" : "", fr == VK_ERROR_DEVICE_LOST ? ", and its fence reports the device lost" : fr != VK_SUCCESS ? ", never on the queue (it refused the submission)" : "", c->ncr, n);
     for (int k = 0; k < n;) {   // a run of the same crumb (Breath of the Wild's chunks hold runs of 17 alike draws) is one line, "× run"
         int i = (c->ncr - n + k) % CR_MAX, run = 1; char kd = c->cr[i].kind; int at = c->ncr - n + k;
         while (k + run < n) { int j = (c->ncr - n + k + run) % CR_MAX;
@@ -725,11 +753,9 @@ static uint64_t chunk_submit(uint64_t nvn_fence) {
     if (rec) { cb_barrier(); rb_record(C); if (C->ts) vkCmdWriteTimestamp(C->cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_tsq, 2 * (uint32_t)(C - g_ch) + 1); if (!deferred) vkEndCommandBuffer(C->cb); C->open = 0; }
     C->nvn_fence = nvn_fence;
     chunk *c = C; C = NULL;
-    VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = rec ? 1u : 0u, .pCommandBuffers = &c->cb};
-    VkResult r = VK_SUCCESS;
-    c->rq_ticket = 0; if (deferred) c->rq_ticket = rec_submit(rec ? c->cb : VK_NULL_HANDLE, c->fence);   // its failures are the recorder's to report (rq_make R_SUBMIT)
-    else { pthread_mutex_lock(&g_vk.qmu); r = vkQueueSubmit(g_vk.q, 1, &si, c->fence); pthread_mutex_unlock(&g_vk.qmu); }
-    if (r != VK_SUCCESS) { RED_ONCE(2, "vkQueueSubmit failed: %d", r); if (r == VK_ERROR_DEVICE_LOST) gpu_fault_log(r); }
+    c->sub_r = VK_SUCCESS; c->rq_ticket = 0;
+    if (deferred) c->rq_ticket = rec_submit(rec ? c->cb : VK_NULL_HANDLE, c->fence, &c->sub_r);   // the recorder submits it and keeps what the queue said in sub_r (rq_make R_SUBMIT)
+    else c->sub_r = submit_or_fence(rec ? c->cb : VK_NULL_HANDLE, c->fence, "");
     g_flushes++;
     pthread_mutex_lock(&g_cmu);
     if (c->nwb || (c->gm_st && gm_store_wait())) atomic_fetch_add(&g_inflight_wb, 1);   // (raw stores: as a write-back of unknown range, chunk_hits)
@@ -1093,7 +1119,7 @@ static void *chunk_thread(void *arg) {
         pthread_mutex_lock(&g_cmu); while (!g_fifo_n) pthread_cond_wait(&g_ccv, &g_cmu); chunk *c = g_fifo[0]; pthread_mutex_unlock(&g_cmu);
         rec_wait_submitted(c->rq_ticket);   // a deferred submission reached the queue first (gfx_vk_rec.inc); before w0, so the recorder's lag is not taken for GPU time
         uint64_t w0 = clock_gettime_nsec_np(CLOCK_MONOTONIC);
-        VkResult fr = vkWaitForFences(g_vk.dev, 1, &c->fence, VK_TRUE, UINT64_MAX);
+        VkResult fr = c->sub_r != VK_SUCCESS ? c->sub_r : vkWaitForFences(g_vk.dev, 1, &c->fence, VK_TRUE, UINT64_MAX);   // a fence never on the queue never signals
         uint64_t waited = clock_gettime_nsec_np(CLOCK_MONOTONIC) - w0; int cut = 0;   // the chunk's time on the GPU (the one before had completed), at most (gpu_slow)
         int ts = c->ts, nq = c->nq, ntq = c->ntq, npq = c->npq;   // the queries it used, reset once read (qr_done): the counts are zeroed on the way
         c->t_end = 0; uint64_t busy = 0;
@@ -1340,6 +1366,7 @@ typedef struct {
     uint32_t mem_type;   // v->mem's memory type (gfx_vk_spare.inc: a freed image's memory kept as a spare)
     VkImageUsageFlags usage; int ext_store;   // its usage; ext_store: STORAGE for views of another format only (EXTENDED_USAGE, vt_storage_up), so each view takes the usage its format has (view_get)
     uint8_t rbx;   // NVN RGBA4 / RGB5 / RGB5A1 / RGB565: the image holds the Vulkan format's order and guest bytes are exchanged where they cross (rb16.h: red's bit, 4 for RGBA4); 0: as they are
+    uint8_t ds_copied;   // a depth image a copy wrote since its last render pass (copy_t2t; gfx_vk_dscopy.inc copied_depth_pass)
 } vtex;
 static nvn_hmap g_tex = {.klen = 8}, g_cpuw = {.klen = 8};   // serial → vtex; serials the CPU wrote (WriteTexels). Keyed by the 8-byte serial
 static uint64_t g_pkg_uploads, g_pkg_reuploads, g_pkg_edge_skips, g_up_bytes, g_draws_skipped;
@@ -2013,6 +2040,7 @@ static int fmt_int(VkFormat f) {   // an integer colour format (vk_of_mtl's): a 
 static int ds_copy_draw(vtex *s, vtex *d, unsigned sl, unsigned sz, unsigned dl, unsigned dz, const p_copy_t2t *c);   // gfx_vk_dscopy.inc: one a blit cannot make, drawn
 static void copy_t2t(const p_copy_t2t *c) {
     vtex *s = vt_get(c->src), *d = vt_get_w(c->dst); if (!s || !d) return;
+    if (d->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) d->ds_copied = 1;   // its next render pass begins with gfx_vk_dscopy.inc copied_depth_pass's draw
     unsigned sl, sz, dl, dz;
     if (!tex_level_layer(s, &c->sv, c->has_sv, &sl, &sz) || !tex_level_layer(d, &c->dv, c->has_dv, &dl, &dz)) return;
     VkCommandBuffer cbuf = cb(); if (!cbuf) return;
@@ -2736,6 +2764,8 @@ void mtl_mem_stat(unsigned long long frame, unsigned long long mb) { LOG("[vk] f
     fl_stats();
     LOG("[vk] indirect dispatches: arguments read on the GPU %llu (vkCmdDispatchIndirect on the pending write, %llu of them in place in a placed pool; DM_VK_IND_FWD), on the CPU %llu, of them %llu after a wait for the GPU (cumulative)", (unsigned long long)g_ind_gpu, (unsigned long long)g_ind_inpl, (unsigned long long)g_ind_cpu, (unsigned long long)g_ind_cpu_wait);
     LOG("[vk] draws not made: shader missing %llu, targets %llu, pipeline %llu, descriptors %llu, invalid binding %llu, pass %llu, vertex buffers %llu; dropped in all %llu, task / mesh draws skipped %llu; shaders whose descriptor set fits no pool %llu; under rasterizer discard: made as dispatches %llu, left out (writing nothing) %llu, their storage buffer writes in place on a home copy %llu / through a scratch copy %llu, home copies made %llu (%llu from a chunk in flight on the GPU), home ranges learned %llu (cumulative)", (unsigned long long)g_drop[0], (unsigned long long)g_drop[1], (unsigned long long)g_drop[2], (unsigned long long)g_drop[3], (unsigned long long)g_drop[4], (unsigned long long)g_drop[5], (unsigned long long)g_drop[6], (unsigned long long)g_draws_dropped, (unsigned long long)g_mesh_skipped, (unsigned long long)g_ds_toobig, (unsigned long long)g_rd_made, (unsigned long long)g_rd_none, (unsigned long long)g_rd_w[0], (unsigned long long)g_rd_w[1], (unsigned long long)g_rd_w[2], (unsigned long long)g_rd_w[3], (unsigned long long)g_rd_learned);
+    LOG("[vk] pipelines met for the first time: %llu built in the background of %llu queued (%llu failed), %llu draws left out meanwhile, %llu built at once for draws that re-draw what an earlier pass laid the depth down for (cumulative; DM_VK_ASYNC_PIPE, apipe_rule.h)",
+        (unsigned long long)g_apq_built, (unsigned long long)g_apq_queued, (unsigned long long)g_apq_failed, (unsigned long long)g_apq_left, (unsigned long long)g_apq_redraw);
     if (memu_on()) LOG("[vk] task / mesh draws in compute form: %llu drawn in %llu parts, %llu skipped, %llu left out while a kernel's pipeline was built; kernel pipelines made %llu (%llu from the driver's cache at once, %llu in the background, %.0f ms of compiles) (cumulative; gfx_vk_meshemu.inc)",
                        (unsigned long long)g_me_draws, (unsigned long long)g_me_parts, (unsigned long long)g_me_skipped, (unsigned long long)g_me_left, (unsigned long long)g_me_kpipes, (unsigned long long)g_me_kcached, (unsigned long long)g_me_kbg, atomic_load(&g_me_kpipe_ns) / 1e6);
     if (g_mesh_leftout) LOG("[vk] task / mesh draws left out: %llu (cumulative; DM_VK_MESH_LEAVE_OUT, gfx_vk_mesh.inc)", (unsigned long long)g_mesh_leftout);
@@ -2745,7 +2775,7 @@ void mtl_mem_stat(unsigned long long frame, unsigned long long mb) { LOG("[vk] f
     LOG("[vk] render passes with every layer of their targets attached (a draw writes the layer): %llu (cumulative; gfx_vk_draw.inc rp_prepare_)", (unsigned long long)g_layered_passes);
     LOG("[vk] compute dispatches: %llu with no barrier before them, %llu after a barrier of the game's, %llu after a command of another kind (a full barrier), %llu runs closed by a later command (cumulative; %s)",
         (unsigned long long)g_cs_free, (unsigned long long)g_cs_gbarred, (unsigned long long)g_cs_first, (unsigned long long)g_cs_closed, cs_game() ? "ordered by the game's barriers, DM_VK_CS_BARRIER" : "DM_VK_CS_BARRIER=full");
-    if (slot0_fill_on()) LOG("[vk] render passes given a scratch target in their empty colour slot 0: %llu (cumulative; gfx_vk_draw.inc slot0_fill_on)", (unsigned long long)g_slot0_fills);
+    if (slot0_fill_on()) LOG("[vk] render passes given a scratch target in their empty colour slot 0: %llu, made with no colour slot as every one was empty: %llu (cumulative; gfx_vk_draw.inc slot0_fill_on)", (unsigned long long)g_slot0_fills, (unsigned long long)g_slot0_none);
     if (layer_pad_on()) LOG("[vk] layered render passes padded past 1 MB of texels with scratch colour slots: %llu (cumulative; gfx_vk_layerpad.inc layer_pad_on)", (unsigned long long)g_layer_pads);
     if (dup_slots_on()) LOG("[vk] render passes attaching an image once that two colour slots name: %llu, draws whose write to the slot left unused was lost: %llu (cumulative; gfx_vk_draw.inc dup_slots)", (unsigned long long)g_dup_passes, (unsigned long long)g_dup_lost);
     if (stg_stat()) { static unsigned long long f0; static uint64_t a0, r0, s0; uint64_t a = atomic_load(&g_stg_allocs), r = atomic_load(&g_stg_frees), sl = g_sp_slices; double nf = frame > f0 ? (double)(frame - f0) : 1;

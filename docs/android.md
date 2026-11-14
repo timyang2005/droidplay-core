@@ -153,6 +153,11 @@ or **Build Game App** (an APK, or an XAPK for an installer app). Its README has 
   ([Saves](#saves)), and the desktop app backs them all up to the computer. The log is
   `Android/data/org.nxnative.android/files/log.txt` (also `adb logcat -s DroidPlay`). The start before's is kept as `log.prev.txt`, so a game the system closed
   for memory and that opened again still leaves its last log.
+- **Removing a game:** **Remove game**, at the bottom of the game's screen, deletes the game from the phone after saying how much space that frees. It deletes the
+  game's folder (`files/games/<title ID>`: code, shaders, game data), its pipeline cache, and its game data on the SD card when it was installed there
+  ([the game data on an SD card](#the-game-data-on-an-sd-card)). Its save stays, and so do its settings, so installing the game again picks up where you left off.
+  **Export save first** in the prompt makes a copy elsewhere. A running game is closed first, after asking. A game whose host the installed app lacks offers
+  **Remove…** when you tap it. It can't be undone: to play the game again, install it again from your computer. A game app is removed by uninstalling it ([Game apps](#game-apps)).
 
 ## Saves
 
@@ -204,6 +209,9 @@ A game whose data is more than an APK holds (2 GB) gets it beside the APK, as `<
 once when the game first starts. On the command line, `--romfs-beside` does this for a smaller game too, so the APK stays small and the data can live on the SD card
 (DLC that fits stays in the APK). An XAPK carries the data as the app's OBB file instead, for an XAPK installer app. A game app is for your own devices only: it
 carries the game, so never share it. How it is packed: [A game app](../dm/android/README.md#a-game-app).
+
+To remove a game app, uninstall it as you would any app (long-press its icon, then **Uninstall**, or **Settings › Apps**). That deletes its save too: a game app keeps
+its save in its own storage, and has no screen to export it. A `<name>.romfs` file you copied over stays where you put it, for you to delete.
 
 ## Another Vulkan driver (Turnip)
 
@@ -283,8 +291,8 @@ with no storage permission. The rest of the game (code, shaders) stays on the ph
   passes `--romfs-beside` for an APK. If the card is out when you install, DroidPlay says so and doesn't start. Going back to Phone storage copies the data back, as above.
 - **When the image isn't there** (the card taken out, or the image not copied yet), the game doesn't start, and the log says so: `[RED] the game's RomFS … is missing`.
 - **Going back:** an install without `--romfs-dir` copies the image to the phone's storage again and leaves the card's copy, which you delete yourself. So does an
-  install from DroidPlay on a Mac, which doesn't pass the option yet. Removing the game leaves the card's copy too; uninstalling the app deletes
-  it, with the app's other folders.
+  install from DroidPlay on a Mac, which doesn't pass the option yet. **Remove game** on the phone deletes the card's copy with the rest of the game; removing
+  the game from the computer (**Manage › Remove from the phone…**) leaves it, for you to delete. Uninstalling the app deletes it, with the app's other folders.
 
 ## Free space
 
@@ -319,8 +327,14 @@ While they translate, the Builds page counts the shaders done out of those left 
 
 ## Games that compile their shaders while they run
 
-Some games carry their shaders as GLSL source and compile them with Nintendo's GLSL compiler while they run (The Binding of Isaac does). Their files hold no shader to
-translate, so the first build has none (`[RED] the game is packed without shaders`): the game runs but draws nothing. The app captures them on the phone by itself:
+Some games carry their shaders as GLSL source and compile them with Nintendo's GLSL compiler while they run. The Binding of Isaac compiles all of them that way; Crash
+Bandicoot N. Sane Trilogy compiles some. No game file holds those shaders, so the first build doesn't have them: whatever they draw is black, and a game that compiles all
+of them has no shaders at all (`[RED] the game is packed without shaders`). It runs but draws nothing.
+
+The build says so before its long steps, once it has read the game's files (its `main` holds GLSL sources and calls `glslcCompile`):
+`[RED] <game> compiles some of its shaders while it runs, so its first install may draw some things black. Play it to its first scene, then bring them in with --update-shaders`.
+DroidPlay for Windows shows the same notice on the Builds page. On the game's page it then points at **Manage › Update shaders from the phone**, which is in bold in the
+Manage menu. A game app can't take them in later, so build it after the steps below. The app captures them on the phone by itself:
 
 1. Play the game for a while: each shader is saved the first time the game compiles it (in the game's folder on the phone, `glslc_capture/`).
 2. On the computer, the game's card in the desktop app says how many new shaders the phone has; **Manage › Update shaders from the phone** copies them, translates
@@ -330,6 +344,14 @@ translate, so the first build has none (`[RED] the game is packed without shader
 
 A scene reached later (or a DLC) can compile more shaders: repeat until the log shows no `no translated shader`. This is done for games packed from a provisional
 profile; a registered profile's shader tables name the captures they were made from. DLC in the NSP folder is extracted and copied to the phone with the game.
+
+**Games only a Mac can build so far.** Six registered profiles' tables name shaders their games compile at boot: DRAGON QUEST BUILDERS 2, Fire Emblem: Three Houses,
+Portal, Portal 2, Hyrule Warriors: Definitive Edition and Catherine: Full Body. Only a build on a Mac captures them (it boots the game in the Mac host), so on Windows and
+Linux these games can't be built yet ([droidplay-core#441](https://github.com/enjoyerofslop/droidplay-core/issues/441)). The build stops at once, before it extracts
+the game: `<game> compiles <N> of its shaders while it runs, with its own shader compiler (GLSLC), and game profile <id>'s shader tables need them. Only a build on a
+Mac can capture them so far`. DroidPlay for Windows shows such a game as **Builds on a Mac only for now** and leaves its Play button off. On a Mac, build the game for
+the Mac first: DroidPlay for Mac, or `build_ipa_from_nsp.py` on the same folder. The Android build then takes the captures from that build's
+`<title ID>_build/extract/<version>/glslc_capture` ([why](reference/packing.md#an-android-build-of-a-game-that-compiles-shaders-while-it-runs-stops-at-the-split-off-a-mac)).
 
 A game packed from a registered profile has its shaders in its tables, so a shader split that fails there stops the build rather than pack the game without them ([why](reference/packing.md#an-android-build-packs-a-registered-game-without-shaders-after-a-split-error-and-succeeds)). A shader translation that stops ends the build for every game, rather than pack it with part of its shaders ([why](reference/packing.md#an-android-build-packs-the-shaders-translated-so-far-after-the-translation-stops)): the shaders translated by then are kept, and the next build translates the rest. So does one that translates none of the shaders it has to (`[RED] spv_build: no shader was translated`), as happens when a file is missing from the translator's folder, `dm/gfx/tools/dmsh_xlate_bin` ([why](reference/packing.md#an-android-build-packs-a-game-without-shaders-when-the-translator-makes-nothing)).
 

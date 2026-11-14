@@ -32,9 +32,13 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 | `build` → `game` | job pool wake-up | race | gap | judgement | 1 | [FINAL FANTASY TACTICS - The Ivalice Chronicles](../../dm/games/010038B015560000/README.md) | a lost wake-up in the game's own job pool, not a host or SDK difference |
 | `build` → `game` | malloc region 60 GB → 4 GB and its first arena | address space | gap | judgement | 1 | [Xenoblade Chronicles 3](../../dm/games/010074F013262000/README.md) | Monolith's own allocator; its constants span two functions (a multi-function rule). The cause, an iPhone's address space, is a platform limit |
 | `build` → `game` | PhysX completion task release | race | gap | judgement | 1 | [The Legend of Zelda: Link's Awakening](../../dm/games/01006BB00C6F0000/README.md) | a lifetime race in the game's own completion task (its release slot serves this one vtable) |
+| `build` → `game` | present interval 2 → 1 with a target fps, and the frame period from the host's frame step | frame rate | gap | judgement | 1 | [Pokémon Legends: Arceus](../../dm/games/01001F5010DFA000/README.md) | the game's own display settings word and frame-time object; MATCH_FRAME_STEP could carry the three stubs (the start-up function, the period getter and the scene update), not tried: 1.1.1 is the only build on hand |
 | `build` → `game` | render intervals, the forced-interval flag and the render-wait timeout | frame rate | gap | judgement | 1 | [Fire Emblem: Three Houses](../../dm/games/010055D009F78000/README.md) | the game's own tables, flag and timeout |
 | `build` → `game` | render scale: the 3D view's dynamic-resolution factor x the host's | rendering | gap | judgement | 1 | [Super Mario Bros. Wonder](../../dm/games/010015100B514000/README.md) | 1.2.1's main at a fixed offset (the Android fork's render-scale setting); a function-matched frame step (MATCH_FRAME_STEP) could carry it over updates |
+| `build` → `game` | scene initialization mode 7: its depth clear also clears the stencil | rendering | gap | checked: 1.0.12 and 1.1.404's mains: the same mode table and clears (2026-11-13) | 1 | [The Elder Scrolls V: Skyrim](../../dm/games/01000A10041EA000/README.md) | the game's own scene initializer; the same switch is at 1.0.12's main+0xb551c0, so a function-matched rule could carry it |
 | `build` → `game` | task ring push and pop barriers | race | gap | judgement | 1 | [Batman: Arkham Knight](../../dm/games/0100ACD0163D0000/README.md) | a data race in the game's own task ring |
+| `build` → `game` | the audio buffer pool's four deque functions under one mutex | race | gap | checked: 1.1.404's main: the four functions are the only callers of the deques (8 call sites, 4 loads of the pool), the padding and the bss tail unused (2026-11-13) | 1 | [The Elder Scrolls V: Skyrim](../../dm/games/01000A10041EA000/README.md) | a data race in the game's own audio pool: its free lists have no lock, and BSTaskManager and LibAudioUpdate use them at once |
+| `build` → `game` | the frame period, and the present interval made from it, from the host's frame step | frame rate | gap | judgement | 1 | [Pokémon: Let's Go, Pikachu!](../../dm/games/010003F003A34000/README.md) | the game's own frame-time object, which Pokémon Legends: Arceus also has (the same getter bytes, setter and period table): MATCH_FRAME_STEP could carry the two stubs (the getter and the present), not tried: 1.0.0, the cartridge's, is the only build on hand. A rule keyed on the getter could serve Game Freak's other mains, each keeping its own interval part |
 | `build` → `game` | UE3's GMalloc setup skipped, the host allocator in (hle_uemalloc.c) | address space | gap | judgement | 1 | [Batman: Arkham Knight](../../dm/games/0100ACD0163D0000/README.md) | UE3 inlines the allocator's constructor into the GMalloc setup and has its own vtable layout (25 slots, 32-bit sizes), so the Unreal 4/5 discovery does not apply |
 | `build` → `game` | unused 272-byte slot pool: 4,194,304 → 65,536 slots | address space | gap | judgement | 1 | [Mario + Rabbids® Sparks of Hope](../../dm/games/0100317013770000/README.md) | Sparks of Hope's own init (Kingdom Battle has none) |
 | `build` → `sdk` | VammManager node area and alignment, SDK 4.4.0 (9de92bad) | address space | blocked: one game ships it | judgement | 1 | [sdk_patches.py](../../dm/tools/sdk_patches.py) | an older implementation no rule covers (its large regions aligned to 32 MB, not the rules' 2 MB); a rule once a second game ships it |
@@ -72,11 +76,13 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 | [NieR:Automata The End of YoRHa Edition (010056B015FE8000)](#nierautomata-the-end-of-yorha-edition-010056b015fe8000) | 8 | 0 | 0 | 0 | 1 | `build` → `game` ×2 |
 | [NieR:Automata The End of YoRHa Edition (0100B8E016F76000)](#nierautomata-the-end-of-yorha-edition-0100b8e016f76000) | 8 | 0 | 0 | 0 | 1 | `build` → `game` ×2 |
 | [Paper Mario: The Thousand-Year Door](#paper-mario-the-thousand-year-door) | 1 | 0 | 1 | 0 | 0 | `build` → `game` |
-| [Pokémon Legends: Arceus](#pokémon-legends-arceus) | 0 | 0 | 0 | 1 | 0 | `game` |
+| [Pokémon Legends: Arceus](#pokémon-legends-arceus) | 0 | 0 | 3 | 1 | 0 | `game`, `build` → `game` |
+| [Pokémon: Let's Go, Pikachu!](#pokémon-lets-go-pikachu) | 0 | 0 | 2 | 0 | 0 | `build` → `game` |
 | [Super Mario 3D All-Stars: Super Mario Sunshine](#super-mario-3d-all-stars-super-mario-sunshine) | 2 | 0 | 0 | 0 | 0 | `build` → `game` |
 | [Super Mario Bros. Wonder](#super-mario-bros-wonder) | 0 | 0 | 1 | 0 | 0 | `build` → `game` |
 | [Super Smash Bros. Ultimate](#super-smash-bros-ultimate) | 11 | 0 | 0 | 1 | 0 | `game` |
 | [Taiko Risshiden V DX](#taiko-risshiden-v-dx) | 1 | 0 | 0 | 2 | 0 | `game` |
+| [The Elder Scrolls V: Skyrim](#the-elder-scrolls-v-skyrim) | 9 | 0 | 0 | 0 | 0 | `build` → `game` ×2 |
 | [The Legend of Zelda: Breath of the Wild](#the-legend-of-zelda-breath-of-the-wild) | 7 | 0 | 43 | 0 | 0 | `build` → `game` ×2 |
 | [The Legend of Zelda: Link's Awakening](#the-legend-of-zelda-links-awakening) | 1 | 0 | 0 | 0 | 0 | `build` → `game` |
 | [The Legend of Zelda: Ocarina of Time](#the-legend-of-zelda-ocarina-of-time) | 0 | 0 | 2 | 0 | 0 | `game` ×2 |
@@ -426,8 +432,23 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 [Pokémon Legends: Arceus](../../dm/games/01001F5010DFA000/README.md), `01001F5010DFA000`, [patches.py](../../dm/games/01001F5010DFA000/patches.py).
 
 - **`game`**, runtime, at goal, checked: function-matched on 1.1.1, the only build on hand: exactly one match, a boot to the field setup, and the patched function run on the module's own bytes in a small interpreter for both null paths. Issue #712's reporters ran the earlier cuts for about 7 hours with no crash; the path itself has not been reached with these cuts: capture demo: the empty result when the weak reference at +0x88 is unset or dead. The game's own function dereferences its own weak reference; no host service is on the path, so no host or engine rule can hold it. Whether another Game Freak game shares the function is unchecked
+- **`build` → `game`**, frame rate, gap, judgement: present interval 2 → 1 with a target fps, and the frame period from the host's frame step. The game's own display settings word and frame-time object; MATCH_FRAME_STEP could carry the three stubs (the start-up function, the period getter and the scene update), not tried: 1.1.1 is the only build on hand
 
+- **1.1.1 `main`** `aee8f150…` ([patches.py:56](../../dm/games/01001F5010DFA000/patches.py#L56))
+  - frame step `+0x277d838`: frame step: display settings, present interval 1 with a target fps (state page; 0 = the game's interval 2)
+  - frame step `+0x278303c`: frame step: the frame period read is the host's vsyncs × 16,666,667 ns (state page target fps; 0 = the stored period)
+  - frame step `+0x279a6f4`: frame step: counts the vsyncs the scene update steps
 - **function-matched** (`main` of builds without CUTS): capture demo: the empty result when the weak reference at +0x88 is unset or dead: 1 function, 5 cuts
+
+### Pokémon: Let's Go, Pikachu!
+
+[Pokémon: Let's Go, Pikachu!](../../dm/games/010003F003A34000/README.md), `010003F003A34000`, [patches.py](../../dm/games/010003F003A34000/patches.py).
+
+- **`build` → `game`**, frame rate, gap, judgement: the frame period, and the present interval made from it, from the host's frame step. The game's own frame-time object, which Pokémon Legends: Arceus also has (the same getter bytes, setter and period table): MATCH_FRAME_STEP could carry the two stubs (the getter and the present), not tried: 1.0.0, the cartridge's, is the only build on hand. A rule keyed on the getter could serve Game Freak's other mains, each keeping its own interval part
+
+- **1.0.0 `main`** `1c375692…` ([patches.py:48](../../dm/games/010003F003A34000/patches.py#L48))
+  - frame step `+0x29e80`: frame step: counts the vsyncs each present steps
+  - frame step `+0x395f0`: frame step: the frame period read (and the present interval made from it) is the host's vsyncs × 16,666,667 ns (state page target fps; 0 = the stored period)
 
 ### Super Mario 3D All-Stars: Super Mario Sunshine
 
@@ -479,6 +500,24 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
   - cut `+0x443fac`: frame limiter threshold: N × tick frequency / 60 (umulh by 1/60 → udiv by 60), then 0 when N = 1 (cmp w20, #1; csel x20, xzr, x8, eq): one vsync a frame is the present pacing's; N = 2 keeps the 2 ms rounds
 - **function-matched** (`main` of builds without CUTS): frame limiter threshold: 0 when N = 1: 1 function, 1 cut
 - **function-matched** (`main` of builds without CUTS): frame limiter threshold: 0 when N = 1: 1 function, 1 cut
+
+### The Elder Scrolls V: Skyrim
+
+[The Elder Scrolls V: Skyrim](../../dm/games/01000A10041EA000/README.md), `01000A10041EA000`, [patches.py](../../dm/games/01000A10041EA000/patches.py).
+
+- **`build` → `game`**, rendering, gap, checked: 1.0.12 and 1.1.404's mains: the same mode table and clears (2026-11-13): scene initialization mode 7: its depth clear also clears the stencil. The game's own scene initializer; the same switch is at 1.0.12's main+0xb551c0, so a function-matched rule could carry it
+- **`build` → `game`**, race, gap, checked: 1.1.404's main: the four functions are the only callers of the deques (8 call sites, 4 loads of the pool), the padding and the bss tail unused (2026-11-13): the audio buffer pool's four deque functions under one mutex. A data race in the game's own audio pool: its free lists have no lock, and BSTaskManager and LibAudioUpdate use them at once
+
+- **1.1.404.0 `main`** `0c0cac3f…` ([patches.py:29](../../dm/games/01000A10041EA000/patches.py#L29))
+  - cut `+0xbf7d5c`: scene initialization mode 7: its depth clear also clears the stencil (mov w3, wzr -> neg w3, w21), which the compute pass writes only into the buffer
+  - cut `+0x1265a00`: audio pool: wrapper of main+0xabd428, which takes an ADPCM header record (pop_front of the deque at +0x1f0): the pool mutex held around it
+  - cut `+0xabd428`: audio pool: main+0xabd428 enters its locked wrapper at +0x1265a00
+  - cut `+0x1265a50`: audio pool: wrapper of main+0xabd4b8, which gives an ADPCM header record back (push_back to the deque at +0x1f0): the pool mutex held around it
+  - cut `+0xabd4b8`: audio pool: main+0xabd4b8 enters its locked wrapper at +0x1265a50
+  - cut `+0x1265aa0`: audio pool: wrapper of main+0xabd548, which takes a wave buffer (pop_front of the deque at +0x1c0) and copies the samples into it: the pool mutex held around it
+  - cut `+0xabd548`: audio pool: main+0xabd548 enters its locked wrapper at +0x1265aa0
+  - cut `+0x1265af0`: audio pool: wrapper of main+0xabd5f0, which gives a wave buffer back (push_back to the deque at +0x1c0): the pool mutex held around it
+  - cut `+0xabd5f0`: audio pool: main+0xabd5f0 enters its locked wrapper at +0x1265af0
 
 ### The Legend of Zelda: Breath of the Wild
 

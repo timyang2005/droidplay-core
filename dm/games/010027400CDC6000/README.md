@@ -2,7 +2,7 @@
 
 Update 1.0.3.1 (v196608) over the base game, SDK 8.2.0. Larian Studios' Divinity Engine (`FW3.5/Gold/Stable` in its asserts' paths), NVN, Wwise sound, RakNet 15.03.26. Modules `main`, `subsdk0` and `sdk`: `subsdk0` and `sdk` are one build (`3ae34e68…`), the SDK twice. The RomFS is 48 files, 10.74 GB: Larian's LSPK packages (`Data/*.pak`, version 13), the voice and localization packages beside them.
 
-Status: brought up on Android, on an Ayn Odin 2 (Adreno 740, Android 13). The title, the main menu, a new game (Classic mode), character creation, the opening cinematic and the first area (the Merryweather's hold, Magister Siwan's first dialogue) in play, at the game's 30 fps, and on a OnePlus Pad 3 the cabin deck after it ([First area](#first-area)); from there, on the Odin 2 by hand, the burning hold, the top deck and its first fight, won ([To the first combat](#to-the-first-combat)), then the lifeboat and a second fight below deck, won ([Below deck](#below-deck)). Not yet played past the locked Greasy Door that follows; see [Open](#open).
+Status: brought up on Android, on an Ayn Odin 2 (Adreno 740, Android 13). The title, the main menu, a new game (Classic mode), character creation, the opening cinematic and the first area (the Merryweather's hold, Magister Siwan's first dialogue) in play, at the game's 30 fps, and on a OnePlus Pad 3 the cabin deck after it ([First area](#first-area)); from there, on the Odin 2 by hand, the burning hold, the top deck and its first fight, won ([To the first combat](#to-the-first-combat)), then the lifeboat and a second fight below deck, won ([Below deck](#below-deck)); and on the Pad 3 by hand from the top deck, the lifeboat's escape, the shipwreck and Fort Joy's beach ([To Fort Joy](#to-fort-joy)). Not yet played past the beach; see [Open](#open).
 
 ## What it needs
 
@@ -65,6 +65,19 @@ Played by hand on the Ayn Odin 2 from `saves/combat`'s `QuickSave_1` (2026-11-10
 - Sound: AudioOut #0's six channels, L and R about −35 dBFS, the rear pair about −62, centre and LFE silent (`DM_AUDIO_DUMP`); 2 and 1 underruns, around loads.
 - Red lines: besides `SetRenderEnableConditional`, four fragment shaders (`08733b8aaa14e146`, `278dbcf7be929822`, `b7c32f113d8b0ee8`, `f6361d15a3d1ae5c`): "an alpha test is set, but the shader has no float vec4 colour 0 to test … the draw keeps the shader as it is". Nothing wrong showed on screen.
 
+## To Fort Joy
+
+Played by hand on the OnePlus Pad 3 (Snapdragon 8 Elite, Adreno 830, driver 0x8032004a, Android 16) from `saves/combat`'s `QuickSave_1` (2026-11-11, `main` at `90379f4e` with this game's Android defaults (`DM_VK_SET_REUSE=1`) at the game's own 30 fps, `DM_CTL` button and stick lines, a private `DM_SAVE` copy):
+
+- **The way on is the lifeboat, not the Greasy Door.** From the top deck the lifeboat is at the port side, about x:19 y:34. The deck between is blocked twice: by the mast's crates at y:29, and by a fire on the grating amidships (walking in made the Red Prince Warm and took him to 3 vitality once; Restoration brought him back). The way round is the outer walkway along the port railing: from about x:40 y:29 step towards the railing to y:34, then follow it to the boat.
+- Leave at the lifeboat starts Gil's and Trice's dialogue. After three lines the player chooses. The first three answers send him back below deck (the [Below deck](#below-deck) stretch). The fourth, *Reach for the release mechanism. Forget the others; you just want off this bloody ship*, then *Insist that there's no time to spare*, lowers the boat (two journal updates, 800 XP).
+- Then the cinematic: the Kraken takes the ship, an underwater scene, and High Judge Orivand's letter ("We lost a ship sailing Sourcerer prisoners to Fort Joy…"). Fort Joy loads with the Red Prince washed up on its beach ("I suppose I'm the lone survivor…"), at about x:184 y:368; a few steps on he finds the beach's waypoint shrine (the Waypoints tutorial; the pause menu gains Waypoints).
+- Quick Save on the beach, then a cold start: Continue loads it (x:188 y:369), and the Load list has it at the top, QuickSave_0, Day 1 17:02, **0:20:39 11/11/2026**, above the earlier ones in date order.
+- 30 fps throughout: 287 windows of 300 frames over the two launches (about 48 minutes), median frame time 32.5–33.8 ms in each; over the whole first launch 29.97 fps, and no 30 s span under 29.3 fps. p95 about 42 ms, GPU about 14–16 ms; the longest frames (321 ms) at loads and saves. 1,271 draws were left out while the new areas' pipelines built in the background, 12 on the second launch.
+- Sound: AudioOut #0, L and R about −35 dBFS, the rear pair about −56, centre and LFE silent (`DM_AUDIO_DUMP`, 104 s from the title into the beach); no underrun in either launch.
+- Red lines: the same five as [below deck](#below-deck), once per launch; nothing wrong showed on screen. No crash.
+- Driving it over adb: `DM_CTL` reads its file from the start at each launch, so a file left over from an earlier launch replays every press in it; empty it before each start.
+
 ## On the Pixel 9 Pro XL
 
 Played by hand on a Google Pixel 9 Pro XL (Mali-G715, Android 16) from `saves/combat`'s `AutoSave_2`, at the foot of the stairs to the top deck (2026-11-10, `main` at `cd1be830` with [#185](https://github.com/enjoyerofslop/droidplay-core/pull/185)'s network clock, adb button and stick events, a private `DM_SAVE` copy):
@@ -74,6 +87,14 @@ Played by hand on a Google Pixel 9 Pro XL (Mali-G715, Android 16) from `saves/co
 - 30 fps, as on the Odin 2: over the 47 windows of 300 frames from the top deck's load to the Quick Save the median frame time stayed between 33.0 and 33.6 ms, with a p95 median of 38.9 ms (40.7 at most); the one frame over 100 ms (144 ms) came at the Quick Save. The GPU takes about 26 ms a frame (about 16 on the Odin 2), with 1,692 draws and 24 ms of replay CPU a frame. BC textures are decoded on the CPU, as the Mali-G715 has none (resident 2.4 GB); ASTC is native.
 - Sound: 187 s of AudioOut #0 from the cold start through Continue (`DM_AUDIO_DUMP`): 5 s of silence at boot, then L and R about −33 dBFS, the rear pair about −39, centre −77, LFE silent, no clipping, spectra like music (flatness 0.00–0.01); 0 underruns in the log.
 - Red lines: the same as the Odin 2's, `SetRenderEnableConditional` and the four alpha-test shaders ([Below deck](#below-deck)). 2,254 draws were left out while new pipelines built in the background, over the first launch's 15 minutes of title, menus, two loads and the fight. Nothing Mali-only showed, on screen or in the log.
+
+## On the Moto Razr Plus 2023
+
+- **Resolved: every start crashed** on a Moto Razr Plus 2023 (Adreno 730, Qualcomm's driver V@0615.98, Android 16), about 8 s in, before the title: `CRASH sig=11 addr=0x4 pc=…(vulkan.adreno.so+0x16ff5c)` on the replay thread, in `vkCmdEndRenderPass` (`rp_end`). The pass it ended: one colour slot, empty, a 1152×648 `D32_SFLOAT_S8_UINT` target, and one full-screen draw with every colour channel masked off. Qualcomm's driver crashes on this shape as on the empty colour slot 0 that crashed Mario Kart 8 Deluxe. A pass whose colour slots are all empty is now made with none ([rendering.md](../../../docs/reference/rendering.md#a-render-pass-with-colour-slot-0-empty-hangs-or-crashes-qualcomms-adreno-driver-android)). The game's 1536×1536 shadow-map passes have this shape too ([Shadows](#shadows)).
+- **Played** on 2026-11-13 with the phone's own APK and Divinity's host from `main` 25bcaf95 plus that change, from a private copy of `saves/combat`'s `AutoSave_2`, with `DM_CTL` presses:
+  - at the game's interval: Continue, the walk below deck and the top deck's first fight, about 7 minutes. 30.0 fps below deck (frame p50 33.3 / p95 35.3 ms, GPU 24.9 ms, replay CPU 21.8 ms). 23.4 fps in the fight (42.4 / 48.8 ms, GPU 34 ms, replay CPU 41 ms), as the GPU and the replay both run past 33 ms. The party lost the fight to the blind presses (Game Over), not to the host.
+  - with `DM_PRESENT_INTERVAL=display`, a second launch: 58.7 fps below deck (GPU 13.0 ms).
+  - red lines: the usual `SetRenderEnableConditional` and the four alpha-test shaders ([Below deck](#below-deck)).
 
 ## Routes
 
@@ -112,4 +133,4 @@ Measured on a OnePlus Pad 3 (Adreno 830, Android 16; its 144 Hz panel runs Divin
 - On a cold pipeline cache, 25 draws of a new game's first minutes are left out while their pipelines build in the background (`[vk] draws not made: … pipeline 25`, `pipeline built in the background … draws left out meanwhile`); with the cache warm, `hold` leaves out none.
 - `[nvn] [RED] SetRenderEnableConditional: the host draws anyway for now`, from the title on.
 - Four fragment shaders have an alpha test set but no float colour 0 to test, so the draw keeps the shader as it is (red lines, [Below deck](#below-deck)); nothing wrong showed on screen.
-- Further into the game (past the locked Greasy Door below deck, Fort Joy) is not played yet. The lifeboat's Leave may be the other way on.
+- Further into the game (past Fort Joy's beach) is not played yet.

@@ -39,13 +39,17 @@ sys.path.insert(0, str(REPO / 'scripts'))
 import build_android_from_nsp as ba   # noqa: E402  (data_dir, library: the host library)
 import phone_id   # noqa: E402  # pyright: ignore[reportMissingImports]  (dm/android/tools, which the script put on the path: a phone's ID, which outlives a Wi-Fi port)
 sys.path.insert(0, str(REPO / 'dm' / 'android' / 'desktop'))
+import i18n as L   # noqa: E402  # pyright: ignore[reportMissingImports]  (dm/android/desktop: the words this window and the modules below show, Chinese on a Chinese system and English elsewhere)
+# The language is settled here, before the modules below are read: their module-level words (first_run's INTRO, phone_guide's brands and steps, wifi's steps,
+# game_data's labels) are made once, at import, so setting it in main() would leave those paragraphs in English under Chinese headings
+L.set_language(os.environ.get('DM_UI_LANG') or QLocale.system().name())
+if L.zh(): os.environ['DM_UI_LANG'] = 'zh-Hans'   # the builds and --check this window starts speak the same language (and their own module-level words, in their own process)
 import first_run as fr   # noqa: E402  # pyright: ignore[reportMissingImports]  (dm/android/desktop, put on the path here: the Get started checklist's steps, Qt-free so its tests run without PySide6)
 import game_data as gd   # noqa: E402  # pyright: ignore[reportMissingImports]  (dm/android/desktop: Phone storage or SD card, per game)
 import wifi   # noqa: E402  # pyright: ignore[reportMissingImports]  (what adb pair, connect and mdns say over Wi-Fi, in plain words)
 import explain as ex   # noqa: E402  # pyright: ignore[reportMissingImports]  (plain words for what went wrong, and the report for #help)
 import phone_guide as pg   # noqa: E402  # pyright: ignore[reportMissingImports]  (how to connect a phone, by brand; its battery and free space)
 import update as upd   # noqa: E402  # pyright: ignore[reportMissingImports]  (the newest release, and its Setup downloaded and checked)
-import i18n as L   # noqa: E402  # pyright: ignore[reportMissingImports]  (dm/android/desktop: the words this window and the modules below show, Chinese on a Chinese system and English elsewhere)
 
 LANGUAGES = [('en-US', L.t('American English', '美式英语')), ('en-GB', L.t('British English', '英式英语')), ('ja', L.t('Japanese', '日语')), ('fr', L.t('French', '法语')), ('de', L.t('German', '德语')), ('es-419', L.t('Latin American Spanish', '拉美西班牙语')),
              ('es', L.t('Spanish', '西班牙语')), ('it', L.t('Italian', '意大利语')), ('nl', L.t('Dutch', '荷兰语')), ('fr-CA', L.t('Canadian French', '加拿大法语')), ('pt', L.t('Portuguese', '葡萄牙语')), ('ru', L.t('Russian', '俄语')), ('ko', L.t('Korean', '韩语')),
@@ -220,7 +224,7 @@ def journal_title(argv):   # what a build from the console does, from its comman
         except Exception: pass
     what = (L.t('Build the game app of ', '构建游戏应用：') if '--game-apk' in argv or '--xapk' in argv else L.t('Update the shaders of ', '更新着色器：') if '--update-shaders' in argv
             else L.t('Install ', '安装 ') if '--push-only' in argv else L.t('Build ', '构建 '))
-    return what + (name or (Path(folder).name if folder else 'a game'))
+    return what + (name or (Path(folder).name if folder else L.t('a game', '一个游戏')))
 
 
 def label(text, name=None, wrap=False):
@@ -264,11 +268,14 @@ class Game:
         ex = info.get('extracted') or {}; self.newest = info.get('newest')
         e = ex.get(self.newest) or (next(iter(ex.values())) if ex else {})
         self.id = info.get('title_id'); self.name = e.get('name') or info.get('name') or self.id or Path(folder).name; self.error = info.get('error')
+        self.detail = info.get('detail') or self.error   # what the read said in full: the files it passed over, and why, before the error
         self.captures = e.get('captures') or 0
         self.icon = e.get('icon'); self.display = e.get('display'); self.languages = e.get('languages') or [c for c, _ in LANGUAGES]
         self.profile = info.get('profile'); self.provisional = info.get('provisional'); self.host = info.get('host'); self.tested = info.get('android_tested')
+        self.run_time = info.get('run_time_shaders') or {}   # {count, ready}: shaders it compiles while it runs that its tables name, which only a Mac build captures (droidplay-core#441)
         self.pm = QPixmap(self.icon) if self.icon else QPixmap()
 
+    def help(self): return ex.explain(self.detail or '', folder=self.folder, read=True)   # the folder's read failed: what to do about it (explain.py)
     def new_shaders(self, on_phone):   # run-time shaders the phone saved beyond the ones on this computer (a provisional profile's only: build_android_from_nsp.py pull_captures)
         return max(0, (on_phone.get(self.id) or {}).get('captures', 0) - self.captures) if self.provisional else 0
     def status(self, on_phone, phone):   # (text, colour, state): state picks what Play does
@@ -276,8 +283,9 @@ class Game:
         # not the game's fault: the tools that read it aren't installed yet. It showed as unreadable, with a disabled "Not supported", to every new player
         if self.info.get('needs_tools'): return L.t("Install DroidPlay's tools to read it: Get started, step 2", "需要先安装 DroidPlay 的工具才能读取：开始使用，第 2 步"), BUILD, 'tools'
         if self.error:   # in plain words (explain.py): keys older than the game get Pick your prod.keys, not a disabled "Can't read it"
-            h = ex.explain(self.error); return h.title, ERR, {'keys': 'keys', 'tools': 'tools'}.get(h.action, 'none')
+            h = self.help(); return h.title, ERR, {'keys': 'keys', 'tools': 'tools', 'folder': 'folder'}.get(h.action, 'none')
         if not self.profile: return L.t('Not supported yet: experimental build only', '尚不支持：只能做实验性构建'), ERR, 'survey'
+        if self.run_time and not self.run_time.get('ready') and not self.host: return ex.mac_only(self.run_time.get('count', 0), sys.platform == 'darwin'), ERR, 'mac'   # its build would stop at once
         x = L.t('Experimental (provisional profile, may not boot) · ', '实验性（临时配置，可能无法启动）· ') if self.provisional else ''   # an experimental build's profile, guessed from the survey
         n = self.new_shaders(on_phone)
         if n and self.host: return L.t(f'{x}{n} new shader(s) captured on the phone · Manage → Update shaders', f'{x}手机上捕获了 {n} 个新着色器 · 管理 → 更新着色器'), BUILD, 'install' if self.id not in on_phone else 'play'
@@ -302,13 +310,14 @@ class Hero(QWidget):   # the picked game, large: its art's wash behind, the art 
         self.manage.setPopupMode(QToolButton.InstantPopup); self.manage.setCursor(Qt.PointingHandCursor)
         row.addWidget(self.play); row.addWidget(self.opts); row.addWidget(self.manage); row.addStretch(); lay.addLayout(row)
 
-    def show_game(self, g, status, color):
+    def show_game(self, g, status, color, hint=''):   # hint: what to do next, after the game's details
         self.pm = g.pm if g else QPixmap(); self.cache = None
         self.status.setText(f'<span style="color:{color}">●&nbsp;&nbsp;{esc(status.upper())}</span>' if g else '')
         self.title.setText(esc(g.name) if g else L.t('Add your first game', '添加你的第一个游戏'))
-        if g and g.error and not g.info.get('needs_keys') and not g.info.get('needs_tools'): self.meta.setText(ex.explain(g.error).body)   # what to do about it
+        if g and g.error and not g.info.get('needs_keys') and not g.info.get('needs_tools'):   # what to do about it, and what the read said, to search or quote
+            self.meta.setText(f'{g.help().body}<br><span style="color:{TEXT3}">{L.t("What it said", "它说的是")}: {esc(g.error)}</span>')
         elif g:
-            bits = [g.id, f'v{g.display}' if g.display else None, (g.info.get('table') or {}).get('engine'), L.t('played on Android', '已在安卓上玩过') if g.tested else L.t('not played on Android yet', '还没在安卓上玩过')]
+            bits = [g.id, f'v{g.display}' if g.display else None, (g.info.get('table') or {}).get('engine'), L.t('played on Android', '已在安卓上玩过') if g.tested else L.t('not played on Android yet', '还没在安卓上玩过'), hint]
             self.meta.setText('   ·   '.join(b for b in bits if b))
         else: self.meta.setText(L.t('Pick the folder with your game\'s NSP or XCI files and your prod.keys, or with a Switch 2 game\'s .nup or dump (no keys): + Build game, at the top right', '选择存放游戏 NSP 或 XCI 文件与 prod.keys 的文件夹，或存放 Switch 2 游戏 .nup 或 dump 的文件夹（不需要密钥）：右上角的「+ 构建游戏」'))
         self.update()
@@ -424,7 +433,7 @@ class LibraryPage(QWidget):
                     msg = str(e).strip().splitlines()[-1].removeprefix('[RED] ') if str(e).strip() else L.t('could not be read', '读不出来')
                     # no keys yet, or no tools yet: before Install what's missing has brought the .NET SDK, nothing can read the packages (build_ipa_from_nsp.py's
                     # "needs dotnet"), and every game read as a folder that could not be read
-                    out[f] = {'error': msg, 'needs_keys': not keys and 'prod.keys' in msg, 'needs_tools': 'dotnet' in msg,
+                    out[f] = {'error': msg, 'detail': str(e).strip(), 'needs_keys': not keys and 'prod.keys' in msg, 'needs_tools': 'dotnet' in msg,
                               'name': names.get(str(Path(f).resolve())) or Path(f).name}
             return out
         def got(r):
@@ -467,10 +476,13 @@ class LibraryPage(QWidget):
     def show_hero(self, g):
         if not g: self.hero.show_game(None, '', TEXT3); self.hero.play.setEnabled(False); self.hero.opts.setEnabled(False); return
         text, color, state = g.status(self.win.phone_games, self.win.phone_name())
-        self.hero.show_game(g, text, color); self.hero.opts.setEnabled(bool(g.profile))
+        self.hero.show_game(g, text, color, ex.RUN_TIME_META if self.run_time_later(g) else ''); self.hero.opts.setEnabled(bool(g.profile))
         self.hero.play.setText({'play': L.t('  Play', '  开始游戏'), 'install': L.t('  Install on phone', '  安装到手机'), 'build': L.t('  Build and install', '  构建并安装'), 'survey': L.t('  Experimental build', '  实验性构建'), 'keys': L.t('  Pick your prod.keys', '  选择 prod.keys'),
-                                'tools': L.t('  Install the tools', '  安装工具'), 'none': L.t("  Can't read it", "  读不出来")}[state])
-        self.hero.play.setEnabled(state != 'none')
+                                'tools': L.t('  Install the tools', '  安装工具'), 'folder': L.t('  Open the folder', '  打开文件夹'), 'none': L.t("  Can't read it", "  读不出来"),
+                                'mac': L.t('  Build it for the Mac first', '  先为 Mac 构建一次') if sys.platform == 'darwin' else L.t('  Builds on a Mac only', '  只能在 Mac 上构建')}[state])
+        self.hero.play.setEnabled(state not in ('none', 'mac'))
+    def run_time_later(self, g):   # a build said the game compiles shaders while it runs (run_time_shaders), which Update shaders brings in: a provisional profile's only
+        return bool(g.provisional and self.win.st.value(f'runtime/{g.id}', False, type=bool))
     def current(self): return self.games.get(self.picked)
     def slide(self, d): sb = self.scroll.horizontalScrollBar(); sb.setValue(sb.value() + d * (Card.W + 20) * 2)
     def arrows(self):
@@ -489,6 +501,7 @@ class LibraryPage(QWidget):
         s = self.win.serial()
         if state == 'keys': self.win.settings.pick_keys(); return   # none yet, or keys older than the game
         if state == 'tools': self.win.go('setup'); return   # the checklist's Install tools
+        if state == 'folder': reveal(g.folder); return   # what's in the folder is what to change (explain.py's rules for the scan)
         if state in ('play', 'install') and not s: self.win.toast(self.win.no_phone()); return
         if state == 'play':
             if not self.first_start_ok(g, s): return
@@ -601,8 +614,11 @@ class LibraryPage(QWidget):
         act(L.t('Build only', '只构建'), lambda: self.run(g, ['--no-push'], L.t('Build', '构建')), bool(g.profile))
         act(L.t('Build a game app…', '构建游戏应用…'), lambda: self.game_app(g), bool(g.profile))
         act(L.t('Install on phone (no build)', '安装到手机（不构建）'), lambda: self.run(g, ['--push-only'], L.t('Install', '安装')), bool(g.profile and g.host and s))
-        n = g.new_shaders(self.win.phone_games)
-        act(L.t(f'Update shaders from the phone ({n} new)', f'从手机取回着色器（{n} 个新的）') if n else L.t('Update shaders from the phone', '从手机取回着色器'), lambda: self.run(g, ['--update-shaders'], L.t('Update shaders', '更新着色器')), bool(g.provisional and g.host and s))
+        n, later = g.new_shaders(self.win.phone_games), self.run_time_later(g)
+        up = act(L.t(f'Update shaders from the phone ({n} new)', f'从手机取回着色器（{n} 个新的）') if n else
+                 (L.t('Update shaders from the phone', '从手机取回着色器') + (L.t(' (after its first scene)', '（玩到第一幕以后）') if later else '')),
+                 lambda: self.run(g, ['--update-shaders'], L.t('Update shaders', '更新着色器')), bool(g.provisional and g.host and s))
+        if n or later: f = up.font(); f.setBold(True); up.setFont(f)   # the next thing to do for this game
         self.menu.addSeparator()
         act(L.t('Update the app on the phone', '更新手机上的应用'), lambda: self.win.builds.start(L.t('Update the app', '更新应用'), ['--apk-only', '--serial', s], after=self.after_task), bool(s and ba.library()))
         act(L.t('Remove from the phone…', '从手机上移除…'), lambda: self.win.phones.remove_game(g.id, g.name), bool(s and g.id in self.win.phone_games))
@@ -642,6 +658,16 @@ class FailBanner(QFrame):   # a build that failed, at the top of the Builds page
         self.show()
 
 
+class NoteBanner(QFrame):   # what the running build says to do next, at the top of the Builds page: amber, as nothing went wrong
+    def __init__(self):
+        super().__init__(); self.setObjectName('notebanner'); self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet('QFrame#notebanner { background: rgba(245,184,46,0.08); border: 1px solid rgba(245,184,46,0.35); border-radius: 12px; }')
+        lay = QVBoxLayout(self); lay.setContentsMargins(22, 14, 22, 14); lay.setSpacing(4)
+        self.title = label(''); self.title.setStyleSheet(f'font-size: 15px; font-weight: 700; color: {BUILD}'); lay.addWidget(self.title)
+        self.body = label('', 'meta', wrap=True); lay.addWidget(self.body); self.hide()
+    def show_note(self, title, body): self.title.setText(title); self.body.setText(body); self.show()
+
+
 class BuildsPage(QWidget):
     progress = Signal(str, str, float, bool)   # title, detail, fraction (-1: unknown), running
     event = Signal(str, object)   # title, a stage event as the script sent it: the checklist draws Install tools' one bar from --setup's
@@ -654,6 +680,7 @@ class BuildsPage(QWidget):
         lay = QVBoxLayout(self); lay.setContentsMargins(48, 32, 48, 24); lay.setSpacing(16)
         self.head = label(L.t('Builds', '构建记录'), 'h1'); lay.addWidget(self.head); self.sub = label(L.t('Nothing running. Builds start from the Library.', '没有在跑的任务。构建从游戏库发起。'), 'muted'); lay.addWidget(self.sub)
         self.banner = FailBanner(self); lay.addWidget(self.banner)
+        self.note = NoteBanner(); lay.addWidget(self.note)
         self.tree = QTreeWidget(); self.tree.setHeaderLabels([L.t('Stage', '阶段'), L.t('Progress', '进度'), L.t('Time', '用时'), L.t('Result', '结果')]); self.tree.setRootIsDecorated(False)
         hh = self.tree.header(); hh.setStretchLastSection(False); hh.setSectionResizeMode(0, QHeaderView.Stretch); hh.setSectionResizeMode(1, QHeaderView.Fixed)
         hh.setSectionResizeMode(2, QHeaderView.ResizeToContents); hh.setSectionResizeMode(3, QHeaderView.Stretch); self.tree.setColumnWidth(1, 220)
@@ -712,7 +739,7 @@ class BuildsPage(QWidget):
         self.progress.emit(title, 'starting…', -1, True)
     def fresh(self, args, bid):   # a build starts: what the last one said and where it stopped are forgotten
         self.last_red = self.last_line = ''; self.reds, self.stage, self.failed_stage, self.args, self.bid, self.journal, self.stopping = [], None, None, list(args), bid, None, False
-        self.banner.hide()
+        self.banner.hide(); self.note.hide()
     def say(self, text, color=None):
         if color is None:
             color = ERR if '[RED]' in text else None
@@ -732,6 +759,7 @@ class BuildsPage(QWidget):
             return
         k = ev.get('ev')
         if k == 'say': self.say(ev.get('msg', '')); return
+        if k == 'run_time_shaders': self.run_time(ev); return
         if k not in ('stage', 'step', 'progress', 'stage_end'): return
         self.event.emit(self.title, ev)
         if k == 'stage': self.stage = (ev.get('k'), ev.get('n'), ev.get('name', ''))
@@ -757,6 +785,9 @@ class BuildsPage(QWidget):
         self.sub.setText(L.t(f'stage {key} of {it.n} · {detail}', f'阶段 {key}，共 {it.n} · {detail}'))
         self.live = None if k == 'stage_end' else (it, detail, frac if frac >= 0 else (self.live[2] if self.live and self.live[0] is it and k != 'step' else -1))
         self.progress.emit(self.title, detail, self.live[2] if self.live else frac, True)
+    def run_time(self, ev):   # build_android_from_nsp.py run_time_note: a provisional profile's game compiles shaders while it runs; the Library then points at Update shaders for it
+        if ev.get('title_id'): self.win.st.setValue(f'runtime/{ev["title_id"]}', True)
+        self.note.show_note(*ex.run_time_note(ev.get('name') or '', bool(ev.get('game_app'))))
     def tick(self):   # the running stage's clock, every second: a long step (adb copying the RomFS) sends no events
         if not self.live or not (self.busy() or self.ext): return
         it, detail, frac = self.live; t = clock_text(time.time() - it.t0)
@@ -1617,6 +1648,7 @@ class Window(QMainWindow):
         elif action == 'tools': self.settings.install(show_builds=False); self.go('setup')
         elif action == 'folder' and folder: reveal(folder)
         elif action == 'backup': self.phones.backup()
+        elif action == 'issue': QDesktopServices.openUrl(QUrl(ex.ISSUE_441))
     def phone_guide(self): PhoneGuide(self).exec()
     def phone_brand(self):   # the guide's brand: of the phone adb sees (its maker once it has allowed this PC, its model code before), else the one picked last time
         d = next((d for d in self.devs or [] if d['state'] == 'device'), None) or next(iter(self.devs or []), None)
@@ -1656,7 +1688,7 @@ class Window(QMainWindow):
     def keys(self): k = self.st.value('keys', '') or ''; return k if k and Path(k).is_file() else None
     def script_json(self, *args):
         r = subprocess.run([PYTHON, str(SCRIPT), *args], capture_output=True, text=True, encoding='utf-8', errors='replace', creationflags=NOWINDOW, env=dict(os.environ, PYTHONUTF8='1'))
-        if r.returncode: raise RuntimeError((r.stderr or r.stdout).strip()[-500:])
+        if r.returncode: raise RuntimeError(ex.script_error(r.stdout, r.stderr))   # its error is on stdout after --info's notes on stderr: the error last
         return json.loads(r.stdout)
     def serial(self): return self.phone.currentData() or None
     def phone_name(self): return self.models.get(self.serial()) or self.serial()
